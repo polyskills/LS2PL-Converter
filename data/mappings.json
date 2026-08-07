@@ -1,0 +1,131 @@
+{
+  "parametres": {
+    "code_journal": "VT",
+    "code_pays": "FR",
+    "devise": "EUR",
+    "famille_categorie_analytique": "POINT_DE_VENTE",
+    "compte_ecart": "471000",
+    "libelle_compte_ecart": "Compte d'attente - écart de report LightSpeed",
+    "tolerance_equilibrage": 0.02
+  },
+  "points_de_vente": [
+    {
+      "code": "REST",
+      "libelle": "RESTAURANT"
+    },
+    {
+      "code": "BARF",
+      "libelle": "BAR FOOD"
+    },
+    {
+      "code": "BARS",
+      "libelle": "BAR SOMMELLERIE"
+    },
+    {
+      "code": "SOM",
+      "libelle": "SOMMELLERIE"
+    },
+    {
+      "code": "ADD",
+      "libelle": "VENTES ADDITIONNELLES"
+    },
+    {
+      "code": "PARIS",
+      "libelle": "PARIS 2.0"
+    }
+  ],
+  "comptes_ventes": [
+    {
+      "categorie_lightspeed": "Cuisine - Entrée",
+      "compte": "70110010",
+      "libelle_compte": "VENTES SOLIDE TVA 10%",
+      "taux_tva": "10%"
+    },
+    {
+      "categorie_lightspeed": "Cuisine - Plat",
+      "compte": "70110010",
+      "libelle_compte": "VENTES SOLIDE TVA 10%",
+      "taux_tva": "10%"
+    },
+    {
+      "categorie_lightspeed": "Cuisine - Dessert",
+      "compte": "70110010",
+      "libelle_compte": "VENTES SOLIDE TVA 10%",
+      "taux_tva": "10%"
+    },
+    {
+      "categorie_lightspeed": "Softs",
+      "compte": "70110010",
+      "libelle_compte": "VENTES SOLIDE TVA 10%",
+      "taux_tva": "10%"
+    },
+    {
+      "categorie_lightspeed": "Alcool (200)",
+      "compte": "70110200",
+      "libelle_compte": "VENTE LIQUIDE TVA 20%",
+      "taux_tva": "20%"
+    },
+    {
+      "categorie_lightspeed": "Vin et Champagne",
+      "compte": "70110200",
+      "libelle_compte": "VENTE LIQUIDE TVA 20%",
+      "taux_tva": "20%"
+    }
+  ],
+  "comptes_analytiques": [
+    {
+      "compte": "70110010",
+      "point_de_vente": "REST",
+      "code_analytique": "REST"
+    },
+    {
+      "compte": "70110200",
+      "point_de_vente": "REST",
+      "code_analytique": "REST"
+    },
+    {
+      "compte": "70110010",
+      "point_de_vente": "BARF",
+      "code_analytique": "BARF"
+    },
+    {
+      "compte": "70110200",
+      "point_de_vente": "BARF",
+      "code_analytique": "BARF"
+    }
+  ],
+  "comptes_paiement": [
+    {
+      "mode_paiement": "Carte bleue",
+      "compte": "511100",
+      "libelle_compte": "Remises de cartes bancaires"
+    },
+    {
+      "mode_paiement": "Espèces",
+      "compte": "530000",
+      "libelle_compte": "Caisse"
+    },
+    {
+      "mode_paiement": "Chèque",
+      "compte": "511200",
+      "libelle_compte": "Chèques à encaisser"
+    },
+    {
+      "mode_paiement": "Ticket restaurant",
+      "compte": "511300",
+      "libelle_compte": "Titres restaurant à encaisser"
+    }
+  ],
+  "comptes_tva": [
+    {
+      "taux": "10%",
+      "compte": "445711",
+      "libelle_compte": "TVA collectée 10%"
+    },
+    {
+      "taux": "20%",
+      "compte": "445712",
+      "libelle_compte": "TVA collectée 20%"
+    }
+  ]
+}
