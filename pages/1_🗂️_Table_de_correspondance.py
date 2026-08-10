@@ -47,15 +47,24 @@ tab_pdv, tab_ventes, tab_analytique, tab_paiement, tab_tva, tab_param = st.tabs(
 )
 
 with tab_pdv:
-    st.markdown("Liste des points de vente (sites, salles, activités...) rencontrés dans les exports LightSpeed.")
+    st.markdown(
+        "Liste des points de vente (sites, salles, activités...) rencontrés dans les exports LightSpeed. "
+        "L'**adresse mail** est optionnelle : si elle est renseignée, tout export LightSpeed reçu "
+        "automatiquement à cette adresse sera rattaché à ce point de vente (voir la moulinette de "
+        "réception automatique). Elle doit être unique entre tous les clients."
+    )
     edited_pdv_df = st.data_editor(
-        _as_editable_df(mappings.get("points_de_vente", []), ["code", "libelle"]),
+        _as_editable_df(mappings.get("points_de_vente", []), ["code", "libelle", "adresse_email"]),
         num_rows="dynamic",
         use_container_width=True,
         key="editor_pdv",
         column_config={
             "code": st.column_config.TextColumn("Code point de vente", required=True),
             "libelle": st.column_config.TextColumn("Libellé", required=True),
+            "adresse_email": st.column_config.TextColumn(
+                "Adresse mail de réception (optionnelle)",
+                help="Adresse dédiée qui reçoit l'export automatique LightSpeed de ce point de vente.",
+            ),
         },
     )
     edited_pdv = edited_pdv_df.dropna(how="all").fillna("").to_dict("records")

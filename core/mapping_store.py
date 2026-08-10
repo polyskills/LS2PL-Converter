@@ -9,7 +9,8 @@ Quatre tables :
 - comptes_analytiques  : (Compte comptable, Point de vente) -> Famille + Code analytique
 - comptes_paiement     : Mode de paiement LightSpeed -> Compte de contrepartie (banque/caisse)
 - comptes_tva          : Taux de TVA -> Compte de TVA collectée
-- points_de_vente      : liste des points de vente connus (code + libellé)
+- points_de_vente      : liste des points de vente connus (code + libellé + adresse mail
+                         de réception de l'export automatique, optionnelle)
 - parametres           : réglages généraux (code journal, compte d'écart/report, etc.)
 """
 from __future__ import annotations
@@ -167,3 +168,40 @@ def find_compte_tva(mappings: dict, taux: str) -> dict | None:
         if row.get("taux") == taux:
             return row
     return None
+
+
+def find_client_pdv_by_email(adresse_email: str) -> tuple[str, str] | None:
+    """Retrouve (client_id, code_point_de_vente) à partir de l'adresse mail
+    dédiée qui a reçu un export automatique. Utilisé par le service de fetch
+    mail pour identifier client et point de vente sans jamais dépendre du nom
+    de fichier : chaque point de vente a sa propre adresse (voir page
+    « Table de correspondance »), ce qui rend l'identification fiable même si
+    LightSpeed change un jour sa convention de nommage de fichier.
+
+    Parcourt tous les clients à chaque appel plutôt que de maintenir un index
+    séparé : le nombre de clients reste faible, et ça évite tout risque
+    d'index désynchronisé après une modification manuelle du référentiel."""
+    from core.client_store import list_clients  # import tardif : évite un cycle
+
+    target = _norm_key(adresse_email)
+    if not target:
+        return None
+    for client in list_clients():
+        mappings = load_mappings(client["id"])
+        for pdv in mappings.get("points_de_vente", []):
+            if _norm_key(pdv.get("adresse_email", "")) == target:
+                return client["id"], pdv["code"]
+    return None
+
+
+def set_pdv_adresse_email(client_id: str, code_pdv: str, adresse_email: str) -> None:
+    """Renseigne l'adresse mail d'un point de vente existant, sans écraser une
+    valeur déjà personnalisée (idempotent, comme ensure_points_de_vente)."""
+    mappings = load_mappings(client_id)
+    changed = False
+    for pdv in mappings.get("points_de_vente", []):
+        if pdv.get("code") == code_pdv and not pdv.get("adresse_email"):
+            pdv["adresse_email"] = adresse_email
+            changed = True
+    if changed:
+        save_mappings(client_id, mappings)
