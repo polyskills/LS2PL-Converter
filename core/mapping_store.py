@@ -54,13 +54,20 @@ DEFAULT_MAPPINGS = {
         {"compte": "70110010", "point_de_vente": "BARF", "code_analytique": "BARF"},
         {"compte": "70110200", "point_de_vente": "BARF", "code_analytique": "BARF"},
     ],
+    # NB : les comptes ci-dessous sont des exemples à valider avec le plan comptable réel
+    # du client avant toute mise en production — voir page "Table de correspondance".
     "comptes_paiement": [
         {"mode_paiement": "Carte bleue", "compte": "511100", "libelle_compte": "Remises de cartes bancaires"},
         {"mode_paiement": "Espèces", "compte": "530000", "libelle_compte": "Caisse"},
         {"mode_paiement": "Chèque", "compte": "511200", "libelle_compte": "Chèques à encaisser"},
         {"mode_paiement": "Ticket restaurant", "compte": "511300", "libelle_compte": "Titres restaurant à encaisser"},
+        {"mode_paiement": "Deliveroo", "compte": "411100", "libelle_compte": "Créances plateformes de livraison - Deliveroo"},
+        {"mode_paiement": "UberEats", "compte": "411110", "libelle_compte": "Créances plateformes de livraison - UberEats"},
+        {"mode_paiement": "Lightspeed Payments", "compte": "511400", "libelle_compte": "Lightspeed Payments à encaisser"},
+        {"mode_paiement": "Tap to Pay sur iPhone", "compte": "511100", "libelle_compte": "Remises de cartes bancaires"},
     ],
     "comptes_tva": [
+        {"taux": "5.5%", "compte": "445710", "libelle_compte": "TVA collectée 5.5%"},
         {"taux": "10%", "compte": "445711", "libelle_compte": "TVA collectée 10%"},
         {"taux": "20%", "compte": "445712", "libelle_compte": "TVA collectée 20%"},
     ],

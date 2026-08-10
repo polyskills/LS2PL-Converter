@@ -101,6 +101,12 @@ def convert(
             )
             continue
 
+        if cat.taux_ambigu:
+            res.avertissements.append(
+                f"Catégorie « {cat.libelle} » : plusieurs taux de TVA détectés sur la même ligne "
+                f"du fichier source — taux retenu {cat.taux_tva}, à vérifier manuellement."
+            )
+
         code_analytique = find_code_analytique(mappings, compte_vente["compte"], point_de_vente)
         if code_analytique is None:
             res.avertissements.append(

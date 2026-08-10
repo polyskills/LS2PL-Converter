@@ -1,28 +1,37 @@
 """
 Parseur du fichier d'export comptable LightSpeed (Restaurant / Retail).
 
-Le fichier exporté par LightSpeed ("... export_accounting_...xls") est une
-feuille unique organisée en deux blocs, sans en-têtes de colonnes stables
-d'une ligne à l'autre (pas de tableau Excel structuré) :
+Le fichier exporté par LightSpeed (".xls"/.xlsx/.csv "export_accounting...")
+est un tableau unique organisé en deux blocs, sans structure de tableau
+Excel figée (pas de nom de plage, pas d'en-têtes typés) :
 
 Bloc 1 - Ventes par référence comptable (catégorie) :
-    Références comptables | Quantité | Total | Rabais | Total TTC Moins
-    les rabais | Montant taxé (10%) | TVA 10% | Montant taxé (20%) |
-    TVA 20% | Total taxes | % | Total HT
+    Références comptables | Quantité | Total | Rabais | (Total TTC net) |
+    [Montant taxé | TVA X% ] x N | Total taxes | % | Total HT
     ... une ligne par catégorie, terminée par une ligne "Total EUR"
+
+    IMPORTANT : le nombre de paires "Montant taxé / TVA X%" est VARIABLE
+    d'un export à l'autre (LightSpeed n'inclut que les taux de TVA
+    effectivement utilisés sur la période : parfois 10/20%, parfois
+    10/20/5.5%, etc.). Le parseur détecte donc ces colonnes dynamiquement
+    par leur intitulé ("TVA 10%", "TVA 5.5%"...) plutôt que par une
+    position fixe — une position fixe casserait silencieusement dès qu'un
+    taux supplémentaire ou différent apparaît, ce qui est inacceptable sur
+    un fichier comptable.
 
 Bloc 2 - Encaissements :
     Modes de paiement | Montant (Moins retour)
-    ... une ligne par mode de paiement, terminée par "Total des paiements"
-    puis "Total des reports" (et son détail), puis les totaux généraux
+    ... une ligne par mode de paiement, terminée par "Total des paiements",
+    puis, le cas échéant, "Total des reports" (+détail, optionnel — absent
+    quand il n'y a pas d'écart de caisse reporté), puis les totaux généraux
     "Total EUR", "Total taxes EUR", "Total EUR (Moins les taxes)".
 
-Ce module localise ces blocs par le libellé de leurs lignes plutôt que par
-une position de cellule fixe, afin de rester robuste aux variations
-mineures de mise en page d'un export à l'autre.
+Formats supportés : .xls (ancien binaire Excel), .xlsx, .csv (séparateur ;
+ou ,, détecté automatiquement).
 """
 from __future__ import annotations
 
+import csv
 import io
 import re
 from dataclasses import dataclass, field
@@ -39,9 +48,10 @@ class CategorieVente:
     libelle: str
     quantite: float | None
     total_ht: float
-    taux_tva: str | None  # "10%" / "20%" / None si non taxé
+    taux_tva: str | None  # "10%" / "20%" / "5.5%" / None si non taxé
     montant_tva: float
     total_ttc: float | None
+    taux_ambigu: bool = False  # True si plusieurs taux non nuls détectés sur la même ligne
 
 
 @dataclass
@@ -69,6 +79,7 @@ class LightspeedExport:
     total_ht_final: float = 0.0
     date_detectee: str | None = None
     point_de_vente_suggere: str | None = None
+    taux_tva_detectes: list = field(default_factory=list)   # taux vus dans l'en-tête, pour info/debug
 
     @property
     def ca_ht(self) -> float:
@@ -88,6 +99,19 @@ class LightspeedExport:
             if c.taux_tva and c.montant_tva:
                 out[c.taux_tva] = round(out.get(c.taux_tva, 0.0) + c.montant_tva, 2)
         return out
+
+    @property
+    def ecart_ventes_encaissements(self) -> float:
+        """Total des encaissements moins total TTC des ventes déclaré par LightSpeed.
+        Doit être égal à -total_reports (0 s'il n'y a pas de report)."""
+        return round(self.total_paiements - self.total_eur_final, 2)
+
+    @property
+    def ventes_encaissements_coherents(self) -> bool:
+        """Contrôle de premier niveau, indépendant du mapping comptable : l'écart entre
+        ventes et encaissements déclaré par le fichier source doit être expliqué par un
+        report connu. Un écart résiduel signale un fichier source incohérent/incomplet."""
+        return abs(round(self.ecart_ventes_encaissements + self.total_reports, 2)) < 0.02
 
 
 def _norm(v) -> str:
@@ -130,25 +154,113 @@ def _guess_date_and_pdv(filename: str) -> tuple[str | None, str | None]:
     return date, pdv
 
 
+def _read_as_dataframe(file_bytes: bytes, filename: str) -> pd.DataFrame:
+    lower = filename.lower()
+    if lower.endswith(".csv"):
+        text = None
+        for enc in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
+            try:
+                text = file_bytes.decode(enc)
+                break
+            except UnicodeDecodeError:
+                continue
+        if text is None:
+            raise LightspeedParseError(f"« {filename} » : encodage du CSV non reconnu.")
+        try:
+            sample = "\n".join(text.splitlines()[:5])
+            dialect = csv.Sniffer().sniff(sample, delimiters=";,\t")
+            sep = dialect.delimiter
+        except csv.Error:
+            sep = ";" if text.split("\n", 1)[0].count(";") >= text.split("\n", 1)[0].count(",") else ","
+        return pd.read_csv(io.StringIO(text), sep=sep, header=None, dtype=str)
+
+    engine = "xlrd" if lower.endswith(".xls") else None
+    return pd.read_excel(io.BytesIO(file_bytes), sheet_name=0, header=None, engine=engine)
+
+
+# Colonnes dont l'intitulé exact identifie une position fixe dans le bloc "ventes".
+_FIXED_HEADER_LABELS = {
+    "references_comptables": "Références comptables",
+    "quantite": "Quantité",
+    "total": "Total",
+    "rabais": "Rabais",
+    "total_taxes": "Total taxes",
+    "total_ht": "Total HT",
+}
+
+_TVA_HEADER_RE = re.compile(r"^TVA\s*([\d]+(?:[.,]\d+)?)\s*%$", re.IGNORECASE)
+
+
+def _locate_ventes_columns(header_row: list[str], filename: str) -> dict:
+    """Retrouve, par intitulé, la position de chaque colonne utile du bloc ventes,
+    y compris un nombre variable de paires (Montant taxé / TVA X%)."""
+
+    def find_exact(label: str) -> int:
+        for i, v in enumerate(header_row):
+            if v == label:
+                return i
+        raise LightspeedParseError(
+            f"« {filename} » : colonne « {label} » introuvable dans l'en-tête du tableau des ventes "
+            f"({header_row}). Le format du fichier LightSpeed a peut-être changé."
+        )
+
+    idx_rabais = find_exact(_FIXED_HEADER_LABELS["rabais"])
+    idx_total_taxes = find_exact(_FIXED_HEADER_LABELS["total_taxes"])
+    idx_total_ht = find_exact(_FIXED_HEADER_LABELS["total_ht"])
+    # Colonne "Total TTC net des rabais" : juste après "Rabais", intitulé parfois vide.
+    idx_ttc = idx_rabais + 1
+
+    # Paires de colonnes de TVA : toute colonne dont l'intitulé matche "TVA X%".
+    # La colonne "Montant taxé" associée est celle qui la précède immédiatement.
+    tva_pairs = []
+    for i, v in enumerate(header_row):
+        m = _TVA_HEADER_RE.match(v)
+        if m:
+            taux = f"{m.group(1).replace(',', '.')}%"
+            base_idx = i - 1
+            if base_idx < 0 or i >= idx_total_taxes:
+                raise LightspeedParseError(
+                    f"« {filename} » : colonne « {v} » à une position inattendue dans l'en-tête."
+                )
+            tva_pairs.append({"taux": taux, "base_idx": base_idx, "tva_idx": i})
+
+    if not tva_pairs:
+        raise LightspeedParseError(
+            f"« {filename} » : aucune colonne de taux de TVA (« TVA X% ») détectée dans l'en-tête "
+            f"du tableau des ventes ({header_row})."
+        )
+
+    return {
+        "idx_quantite": find_exact(_FIXED_HEADER_LABELS["quantite"]),
+        "idx_ttc": idx_ttc,
+        "idx_total_taxes": idx_total_taxes,
+        "idx_total_ht": idx_total_ht,
+        "tva_pairs": tva_pairs,
+    }
+
+
 def parse_lightspeed_export(file_bytes: bytes, filename: str) -> LightspeedExport:
-    """Lit un export comptable LightSpeed (.xls ou .xlsx) et retourne sa structure."""
-    engine = "xlrd" if filename.lower().endswith(".xls") else None
+    """Lit un export comptable LightSpeed (.xls / .xlsx / .csv) et retourne sa structure."""
     try:
-        df = pd.read_excel(io.BytesIO(file_bytes), sheet_name=0, header=None, engine=engine)
+        df = _read_as_dataframe(file_bytes, filename)
+    except LightspeedParseError:
+        raise
     except Exception as exc:  # pragma: no cover - message utilisateur
         raise LightspeedParseError(
-            f"Impossible de lire « {filename} » comme un export LightSpeed (.xls/.xlsx) : {exc}"
+            f"Impossible de lire « {filename} » comme un export LightSpeed (.xls/.xlsx/.csv) : {exc}"
         ) from exc
 
     col0 = df[0].map(_norm) if 0 in df.columns else pd.Series([], dtype=str)
 
-    header_idx = col0[col0 == "Références comptables"].index
-    if len(header_idx) == 0:
+    header_idx_candidates = col0[col0 == _FIXED_HEADER_LABELS["references_comptables"]].index
+    if len(header_idx_candidates) == 0:
         raise LightspeedParseError(
             f"« {filename} » ne ressemble pas à un export comptable LightSpeed "
             "(ligne 'Références comptables' introuvable)."
         )
-    header_idx = header_idx[0]
+    header_idx = header_idx_candidates[0]
+    header_row = [_norm(v) for v in df.iloc[header_idx].tolist()]
+    cols = _locate_ventes_columns(header_row, filename)
 
     total_idx_candidates = col0[(col0 == "Total EUR") & (col0.index > header_idx)].index
     if len(total_idx_candidates) == 0:
@@ -162,21 +274,31 @@ def parse_lightspeed_export(file_bytes: bytes, filename: str) -> LightspeedExpor
         libelle = _norm(df.iat[i, 0])
         if not libelle:
             continue
-        total_ht = _num(df.iat[i, 11]) if df.shape[1] > 11 else 0.0
-        base10 = _num(df.iat[i, 5]) if df.shape[1] > 5 else 0.0
-        tva10 = _num(df.iat[i, 6]) if df.shape[1] > 6 else 0.0
-        base20 = _num(df.iat[i, 7]) if df.shape[1] > 7 else 0.0
-        tva20 = _num(df.iat[i, 8]) if df.shape[1] > 8 else 0.0
-        ttc = _num(df.iat[i, 4]) if df.shape[1] > 4 else None
-        quantite = _num(df.iat[i, 1]) if df.shape[1] > 1 else None
 
-        if not total_ht and not tva10 and not tva20 and not base10 and not base20:
+        total_ht = _num(df.iat[i, cols["idx_total_ht"]])
+        total_taxes = _num(df.iat[i, cols["idx_total_taxes"]])
+        ttc = _num(df.iat[i, cols["idx_ttc"]]) if cols["idx_ttc"] < df.shape[1] else None
+        quantite = _num(df.iat[i, cols["idx_quantite"]])
+
+        taux_trouves = []
+        for pair in cols["tva_pairs"]:
+            montant_tva = _num(df.iat[i, pair["tva_idx"]])
+            if montant_tva:
+                taux_trouves.append((pair["taux"], montant_tva))
+
+        if not total_ht and not total_taxes and not taux_trouves:
             continue  # ligne de catégorie sans aucune vente sur la période
 
-        if tva20:
-            taux, montant_tva = "20%", tva20
-        elif tva10:
-            taux, montant_tva = "10%", tva10
+        taux_ambigu = len(taux_trouves) > 1
+        if taux_trouves:
+            # Cas normal : un seul taux par ligne. En cas d'ambiguïté (plusieurs
+            # taux non nuls sur la même ligne, jamais vu à ce jour mais possible),
+            # on ne perd aucune donnée : Total HT / Total taxes déclarés par
+            # LightSpeed font foi, et on retient le taux dominant pour l'affichage,
+            # tout en signalant l'anomalie à l'appelant.
+            taux_trouves.sort(key=lambda t: t[1], reverse=True)
+            taux = taux_trouves[0][0]
+            montant_tva = total_taxes if total_taxes else taux_trouves[0][1]
         else:
             taux, montant_tva = None, 0.0
 
@@ -188,6 +310,7 @@ def parse_lightspeed_export(file_bytes: bytes, filename: str) -> LightspeedExpor
                 taux_tva=taux,
                 montant_tva=round(montant_tva, 2),
                 total_ttc=round(ttc, 2) if ttc is not None else None,
+                taux_ambigu=taux_ambigu,
             )
         )
 
@@ -201,37 +324,69 @@ def parse_lightspeed_export(file_bytes: bytes, filename: str) -> LightspeedExpor
     total_ht_final = 0.0
 
     if len(paiement_hdr):
+        # Machine à états, car deux variantes d'export ont été observées :
+        #   (a) ... Total des paiements | Total des reports (+ détail) | Total EUR | Total taxes EUR | Total EUR (Moins les taxes)
+        #   (b) ... Total EUR (directement, sans ligne "Total des paiements" ni report) | Total taxes EUR | Total EUR (Moins les taxes)
+        # On pilote uniquement par intitulé de ligne, jamais par position, pour
+        # rester robuste à ces variations et à d'éventuelles futures.
         p_idx = paiement_hdr[0]
+        state = "PAIEMENTS"
         j = p_idx + 1
-        while j < len(df) and _norm(df.iat[j, 0]) != "Total des paiements":
-            lbl = _norm(df.iat[j, 0])
-            if lbl:
-                paiements.append(ModePaiement(libelle=lbl, montant=round(_num(df.iat[j, 1]), 2)))
-            j += 1
-        if j < len(df):
-            total_paiements = round(_num(df.iat[j, 1]), 2)
-            j += 1
-        if j < len(df) and _norm(df.iat[j, 0]) == "Total des reports":
-            total_reports = round(_num(df.iat[j, 1]), 2)
-            j += 1
-            while j < len(df) and _norm(df.iat[j, 0]) not in (
-                "Total EUR",
-                "Total taxes EUR",
-                "Total EUR (Moins les taxes)",
-                "",
-            ):
-                lbl = _norm(df.iat[j, 0])
-                reports.append(LigneReport(libelle=lbl, montant=round(_num(df.iat[j, 1]), 2)))
-                j += 1
         while j < len(df):
             lbl = _norm(df.iat[j, 0])
-            if lbl == "Total EUR":
-                total_eur_final = round(_num(df.iat[j, 1]), 2)
-            elif lbl == "Total taxes EUR":
-                total_taxes_final = round(_num(df.iat[j, 1]), 2)
-            elif lbl == "Total EUR (Moins les taxes)":
-                total_ht_final = round(_num(df.iat[j, 1]), 2)
+            val = round(_num(df.iat[j, 1]), 2)
+
+            if state == "PAIEMENTS":
+                if lbl == "Total des paiements":
+                    total_paiements = val
+                    state = "APRES_PAIEMENTS"
+                elif lbl == "Total EUR":
+                    # Pas de ligne "Total des paiements" distincte dans cet export :
+                    # le total des encaissements et le total général sont la même valeur.
+                    total_paiements = val
+                    total_eur_final = val
+                    state = "APRES_TOTAL_EUR"
+                elif lbl:
+                    paiements.append(ModePaiement(libelle=lbl, montant=val))
+
+            elif state == "APRES_PAIEMENTS":
+                if lbl == "Total des reports":
+                    total_reports = val
+                    state = "DETAIL_REPORTS"
+                elif lbl == "Total EUR":
+                    total_eur_final = val
+                    state = "APRES_TOTAL_EUR"
+                elif lbl == "Total taxes EUR":
+                    total_taxes_final = val
+                elif lbl == "Total EUR (Moins les taxes)":
+                    total_ht_final = val
+
+            elif state == "DETAIL_REPORTS":
+                if lbl == "Total EUR":
+                    total_eur_final = val
+                    state = "APRES_TOTAL_EUR"
+                elif lbl:
+                    reports.append(LigneReport(libelle=lbl, montant=val))
+
+            elif state == "APRES_TOTAL_EUR":
+                if lbl == "Total taxes EUR":
+                    total_taxes_final = val
+                elif lbl == "Total EUR (Moins les taxes)":
+                    total_ht_final = val
+
             j += 1
+
+        if state in ("PAIEMENTS",):
+            raise LightspeedParseError(
+                f"« {filename} » : fin du bloc « Modes de paiement » introuvable "
+                "('Total des paiements' ou 'Total EUR' attendu) — impossible de vérifier "
+                "que le total des ventes correspond au total des encaissements."
+            )
+    else:
+        raise LightspeedParseError(
+            f"« {filename} » : bloc « Modes de paiement » introuvable — impossible de vérifier "
+            "que le total des ventes correspond au total des encaissements."
+        )
 
     date_detectee, pdv_suggere = _guess_date_and_pdv(filename)
 
@@ -247,4 +402,5 @@ def parse_lightspeed_export(file_bytes: bytes, filename: str) -> LightspeedExpor
         total_ht_final=total_ht_final,
         date_detectee=date_detectee,
         point_de_vente_suggere=pdv_suggere,
+        taux_tva_detectes=[p["taux"] for p in cols["tva_pairs"]],
     )

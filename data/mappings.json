@@ -114,9 +114,34 @@
       "mode_paiement": "Ticket restaurant",
       "compte": "511300",
       "libelle_compte": "Titres restaurant à encaisser"
+    },
+    {
+      "mode_paiement": "Deliveroo",
+      "compte": "411100",
+      "libelle_compte": "Créances plateformes de livraison - Deliveroo"
+    },
+    {
+      "mode_paiement": "UberEats",
+      "compte": "411110",
+      "libelle_compte": "Créances plateformes de livraison - UberEats"
+    },
+    {
+      "mode_paiement": "Lightspeed Payments",
+      "compte": "511400",
+      "libelle_compte": "Lightspeed Payments à encaisser"
+    },
+    {
+      "mode_paiement": "Tap to Pay sur iPhone",
+      "compte": "511100",
+      "libelle_compte": "Remises de cartes bancaires"
     }
   ],
   "comptes_tva": [
+    {
+      "taux": "5.5%",
+      "compte": "445710",
+      "libelle_compte": "TVA collectée 5.5%"
+    },
     {
       "taux": "10%",
       "compte": "445711",
