@@ -1,6 +1,7 @@
-"""Génère le classeur Excel au format d'import avancé Pennylane."""
+"""Génère le fichier au format d'import avancé Pennylane (CSV, et .xlsx pour relecture)."""
 from __future__ import annotations
 
+import csv
 import io
 
 from openpyxl import Workbook
@@ -8,6 +9,28 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from core.converter import PENNYLANE_COLUMNS, ConversionResult
+
+
+def _format_value(val) -> str:
+    if val is None or val == "":
+        return ""
+    if isinstance(val, float):
+        # Convention alignée sur les exports LightSpeed sources : séparateur
+        # décimal '.', pas de séparateur de milliers.
+        return f"{val:.2f}".rstrip("0").rstrip(".") if val != int(val) else str(int(val))
+    return str(val)
+
+
+def build_pennylane_csv(resultats: list[ConversionResult]) -> bytes:
+    """Génère le fichier CSV destiné à l'import Pennylane (séparateur ';', UTF-8 avec BOM
+    pour une ouverture correcte dans Excel, mêmes 18 colonnes que le gabarit d'import avancé)."""
+    buf = io.StringIO()
+    writer = csv.writer(buf, delimiter=";", lineterminator="\r\n")
+    writer.writerow(PENNYLANE_COLUMNS)
+    for res in resultats:
+        for ligne in res.lignes:
+            writer.writerow([_format_value(ligne.get(col, "")) for col in PENNYLANE_COLUMNS])
+    return ("﻿" + buf.getvalue()).encode("utf-8")
 
 
 def build_pennylane_workbook(resultats: list[ConversionResult]) -> bytes:

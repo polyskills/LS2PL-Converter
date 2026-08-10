@@ -2,3 +2,8 @@ __pycache__/
 *.pyc
 .venv/
 .streamlit/secrets.toml
+
+# Données clients (référentiels + historique de conversions) : sensibles,
+# jamais versionnées. Sur un serveur dédié, ce dossier vit sur disque
+# persistant en dehors du dépôt git.
+data/clients/

@@ -80,7 +80,7 @@ def convert(
     params = mappings.get("parametres", {})
     code_journal = code_journal or params.get("code_journal", "VT")
     code_pays = params.get("code_pays", "FR")
-    famille = params.get("famille_categorie_analytique", "POINT_DE_VENTE")
+    famille_defaut = params.get("famille_categorie_analytique", "POINT_DE_VENTE")
     libelle_piece = libelle_piece or f"Ventes LightSpeed {export.source_filename}"
 
     res = ConversionResult(source_filename=export.source_filename, point_de_vente=point_de_vente)
@@ -109,10 +109,18 @@ def convert(
 
         code_analytique = find_code_analytique(mappings, compte_vente["compte"], point_de_vente)
         if code_analytique is None:
-            res.avertissements.append(
-                f"Pas de code analytique pour le compte {compte_vente['compte']} "
-                f"/ point de vente « {point_de_vente} » → ligne exportée sans code analytique."
+            # Le code analytique est la raison d'être de l'outil : une combinaison
+            # (compte, point de vente) non paramétrée est traitée comme une erreur
+            # bloquante, au même titre qu'une catégorie non mappée, et non comme un
+            # simple avertissement.
+            res.erreurs.append(
+                f"Aucun code analytique paramétré pour le compte {compte_vente['compte']} "
+                f"/ point de vente « {point_de_vente} » — complétez la table « Codes analytiques »."
             )
+            famille_ligne, code_ligne = "", ""
+        else:
+            famille_ligne = code_analytique.get("famille") or famille_defaut
+            code_ligne = code_analytique["code_analytique"]
 
         res.lignes.append(
             {
@@ -127,9 +135,9 @@ def convert(
                 "Numéro de pièce": numero_piece,
                 "Débit et/ou Crédit": 0,
                 "Crédit": round(cat.total_ht, 2),
-                "Famille de catégories": famille if code_analytique else "",
+                "Famille de catégories": famille_ligne,
                 "Catégorie": point_de_vente,
-                "Code analytique": code_analytique["code_analytique"] if code_analytique else "",
+                "Code analytique": code_ligne,
                 "Identifiant de ligne": ligne_id,
                 "Poids analytique": 1,
                 "Identifiant de lettrage": "",

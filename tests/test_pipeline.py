@@ -86,11 +86,13 @@ def test_missing_mapping_reports_error_and_ca_mismatch():
     assert any("non mappée" in a for a in res.avertissements)
 
 
-def test_unknown_point_de_vente_flags_warning_without_blocking():
+def test_unknown_point_de_vente_blocks_export():
+    """Le code analytique est la finalité de l'outil : un point de vente sans
+    correspondance dans la table analytique doit bloquer l'export, pas juste avertir."""
     export = parse_lightspeed_export(_build_sample_xlsx(), "test_export.xlsx")
     res = convert(export, DEFAULT_MAPPINGS, point_de_vente="INCONNU", date_piece="26/05/26", numero_piece="LS-TEST")
-    assert res.ca_ok  # le CA est quand même généré...
-    assert any("code analytique" in a for a in res.avertissements)  # ...mais sans code analytique
+    assert not res.sans_erreur
+    assert any("code analytique" in e for e in res.erreurs)
 
 
 # --- Variante CSV réelle : nombre de taux de TVA variable (5.5/10/20%), pas de

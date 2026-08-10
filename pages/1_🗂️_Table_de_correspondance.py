@@ -1,26 +1,29 @@
 """
 Page de paramétrage des tables de correspondance utilisées par la moulinette
-de conversion LightSpeed → Pennylane.
-
-Toutes les tables sont éditables directement (ajout/suppression de lignes) et
-persistées dans data/mappings.json.
+de conversion LightSpeed → Pennylane, pour le client actuellement sélectionné.
 """
 from __future__ import annotations
 
 import streamlit as st
 
-from core.mapping_store import DEFAULT_MAPPINGS, load_mappings, save_mappings
+from core.mapping_store import load_mappings, reset_to_empty, save_mappings, seed_with_examples
+from core.ui_common import select_client
 
 st.set_page_config(page_title="Table de correspondance", page_icon="🗂️", layout="wide")
+
+client_id = select_client()
 
 st.title("🗂️ Table de correspondance")
 st.caption(
     "LightSpeed ne gère pas de code analytique : c'est la combinaison "
     "**compte comptable × point de vente** qui permet de le reconstituer. "
-    "Paramétrez ici les quatre tables utilisées par la conversion."
+    "Paramétrez ici les tables utilisées par la conversion, propres au client sélectionné."
 )
 
-mappings = load_mappings()
+if client_id is None:
+    st.stop()
+
+mappings = load_mappings(client_id)
 
 tab_pdv, tab_ventes, tab_analytique, tab_paiement, tab_tva, tab_param = st.tabs(
     [
@@ -49,7 +52,8 @@ with tab_pdv:
 with tab_ventes:
     st.markdown(
         "Correspondance entre chaque **catégorie / référence comptable LightSpeed** "
-        "(colonne « Références comptables » de l'export) et le **compte général de vente Pennylane**."
+        "(colonne « Références comptables » de l'export) et le **compte général de vente Pennylane**. "
+        "Toute catégorie rencontrée dans un fichier importé et absente d'ici bloquera l'export."
     )
     edited_ventes = st.data_editor(
         mappings.get("comptes_ventes", []),
@@ -66,8 +70,10 @@ with tab_ventes:
 
 with tab_analytique:
     st.markdown(
-        "Pour un **compte comptable** donné et un **point de vente** donné, le **code analytique** à générer. "
-        "C'est cette table qui « rejoue » l'analytique que LightSpeed ne fournit pas."
+        "Pour un **compte comptable** donné et un **point de vente** donné, la **famille analytique** "
+        "et le **code analytique** à générer. C'est cette table qui « rejoue » l'analytique que "
+        "LightSpeed ne fournit pas. Toute combinaison (compte, point de vente) rencontrée à la "
+        "conversion et absente d'ici bloquera l'export."
     )
     edited_analytique = st.data_editor(
         mappings.get("comptes_analytiques", []),
@@ -81,14 +87,17 @@ with tab_analytique:
                 options=[p["code"] for p in edited_pdv] if edited_pdv else [],
                 required=True,
             ),
+            "famille": st.column_config.TextColumn("Famille analytique", required=True),
             "code_analytique": st.column_config.TextColumn("Code analytique généré", required=True),
         },
     )
 
 with tab_paiement:
     st.markdown(
-        "Correspondance entre chaque **mode de paiement LightSpeed** (Carte bleue, Espèces, Chèque...) "
-        "et son **compte de contrepartie** (banque, caisse) dans Pennylane."
+        "Correspondance entre chaque **mode de paiement LightSpeed** (Carte bleue, Espèces, "
+        "Deliveroo, UberEats...) et son **compte de contrepartie** (banque, caisse, créance "
+        "plateforme) dans Pennylane. Un mode de paiement non mappé bloque également l'export "
+        "(l'écriture serait déséquilibrée)."
     )
     edited_paiement = st.data_editor(
         mappings.get("comptes_paiement", []),
@@ -110,14 +119,16 @@ with tab_tva:
         use_container_width=True,
         key="editor_tva",
         column_config={
-            "taux": st.column_config.SelectboxColumn("Taux de TVA", options=["0%", "5.5%", "10%", "20%"], required=True),
+            "taux": st.column_config.SelectboxColumn(
+                "Taux de TVA", options=["0%", "5.5%", "10%", "20%"], required=True
+            ),
             "compte": st.column_config.TextColumn("Compte de TVA collectée", required=True),
             "libelle_compte": st.column_config.TextColumn("Libellé du compte"),
         },
     )
 
 with tab_param:
-    st.markdown("Réglages généraux appliqués à toutes les conversions.")
+    st.markdown("Réglages généraux appliqués à toutes les conversions de ce client.")
     params = mappings.get("parametres", {})
     c1, c2 = st.columns(2)
     with c1:
@@ -125,7 +136,7 @@ with tab_param:
         code_pays = st.text_input("Code pays du compte", value=params.get("code_pays", "FR"))
         devise = st.text_input("Devise", value=params.get("devise", "EUR"))
         famille = st.text_input(
-            "Famille de catégories analytique",
+            "Famille analytique par défaut (si non précisée ligne par ligne)",
             value=params.get("famille_categorie_analytique", "POINT_DE_VENTE"),
         )
     with c2:
@@ -153,6 +164,7 @@ st.divider()
 b1, b2, _ = st.columns([1, 1, 4])
 if b1.button("💾 Enregistrer les tables de correspondance", type="primary"):
     save_mappings(
+        client_id,
         {
             "parametres": edited_params,
             "points_de_vente": edited_pdv,
@@ -160,12 +172,12 @@ if b1.button("💾 Enregistrer les tables de correspondance", type="primary"):
             "comptes_analytiques": edited_analytique,
             "comptes_paiement": edited_paiement,
             "comptes_tva": edited_tva,
-        }
+        },
     )
     st.session_state.pop("resultats", None)
     st.success("Tables de correspondance enregistrées.")
 
-if b2.button("↩️ Réinitialiser les valeurs d'exemple"):
-    save_mappings(DEFAULT_MAPPINGS)
+if b2.button("🗑️ Vider ce référentiel"):
+    reset_to_empty(client_id)
     st.session_state.pop("resultats", None)
     st.rerun()
