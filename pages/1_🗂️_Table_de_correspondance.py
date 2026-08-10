@@ -4,12 +4,22 @@ de conversion LightSpeed → Pennylane, pour le client actuellement sélectionn�
 """
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
 from core.mapping_store import load_mappings, reset_to_empty, save_mappings, seed_with_examples
 from core.ui_common import select_client
 
 st.set_page_config(page_title="Table de correspondance", page_icon="🗂️", layout="wide")
+
+
+def _as_editable_df(rows: list[dict], columns: list[str]) -> pd.DataFrame:
+    """st.data_editor ne sait pas proposer de bouton '+' d'ajout de ligne sur une
+    liste Python vide : sans colonnes connues, il n'a rien à afficher. On force
+    donc toujours un DataFrame avec les colonnes attendues, même à 0 ligne."""
+    if not rows:
+        return pd.DataFrame(columns=columns)
+    return pd.DataFrame(rows)[columns]
 
 client_id = select_client()
 
@@ -38,8 +48,8 @@ tab_pdv, tab_ventes, tab_analytique, tab_paiement, tab_tva, tab_param = st.tabs(
 
 with tab_pdv:
     st.markdown("Liste des points de vente (sites, salles, activités...) rencontrés dans les exports LightSpeed.")
-    edited_pdv = st.data_editor(
-        mappings.get("points_de_vente", []),
+    edited_pdv_df = st.data_editor(
+        _as_editable_df(mappings.get("points_de_vente", []), ["code", "libelle"]),
         num_rows="dynamic",
         use_container_width=True,
         key="editor_pdv",
@@ -48,6 +58,7 @@ with tab_pdv:
             "libelle": st.column_config.TextColumn("Libellé", required=True),
         },
     )
+    edited_pdv = edited_pdv_df.dropna(how="all").fillna("").to_dict("records")
 
 with tab_ventes:
     st.markdown(
@@ -55,8 +66,11 @@ with tab_ventes:
         "(colonne « Références comptables » de l'export) et le **compte général de vente Pennylane**. "
         "Toute catégorie rencontrée dans un fichier importé et absente d'ici bloquera l'export."
     )
-    edited_ventes = st.data_editor(
-        mappings.get("comptes_ventes", []),
+    edited_ventes_df = st.data_editor(
+        _as_editable_df(
+            mappings.get("comptes_ventes", []),
+            ["categorie_lightspeed", "compte", "libelle_compte", "taux_tva"],
+        ),
         num_rows="dynamic",
         use_container_width=True,
         key="editor_ventes",
@@ -67,6 +81,7 @@ with tab_ventes:
             "taux_tva": st.column_config.SelectboxColumn("Taux TVA nominal", options=["0%", "5.5%", "10%", "20%"]),
         },
     )
+    edited_ventes = edited_ventes_df.dropna(how="all").fillna("").to_dict("records")
 
 with tab_analytique:
     st.markdown(
@@ -75,8 +90,11 @@ with tab_analytique:
         "LightSpeed ne fournit pas. Toute combinaison (compte, point de vente) rencontrée à la "
         "conversion et absente d'ici bloquera l'export."
     )
-    edited_analytique = st.data_editor(
-        mappings.get("comptes_analytiques", []),
+    edited_analytique_df = st.data_editor(
+        _as_editable_df(
+            mappings.get("comptes_analytiques", []),
+            ["compte", "point_de_vente", "famille", "code_analytique"],
+        ),
         num_rows="dynamic",
         use_container_width=True,
         key="editor_analytique",
@@ -91,6 +109,7 @@ with tab_analytique:
             "code_analytique": st.column_config.TextColumn("Code analytique généré", required=True),
         },
     )
+    edited_analytique = edited_analytique_df.dropna(how="all").fillna("").to_dict("records")
 
 with tab_paiement:
     st.markdown(
@@ -99,8 +118,8 @@ with tab_paiement:
         "plateforme) dans Pennylane. Un mode de paiement non mappé bloque également l'export "
         "(l'écriture serait déséquilibrée)."
     )
-    edited_paiement = st.data_editor(
-        mappings.get("comptes_paiement", []),
+    edited_paiement_df = st.data_editor(
+        _as_editable_df(mappings.get("comptes_paiement", []), ["mode_paiement", "compte", "libelle_compte"]),
         num_rows="dynamic",
         use_container_width=True,
         key="editor_paiement",
@@ -110,11 +129,12 @@ with tab_paiement:
             "libelle_compte": st.column_config.TextColumn("Libellé du compte"),
         },
     )
+    edited_paiement = edited_paiement_df.dropna(how="all").fillna("").to_dict("records")
 
 with tab_tva:
     st.markdown("Compte de **TVA collectée** à utiliser pour chaque taux de TVA rencontré dans les ventes.")
-    edited_tva = st.data_editor(
-        mappings.get("comptes_tva", []),
+    edited_tva_df = st.data_editor(
+        _as_editable_df(mappings.get("comptes_tva", []), ["taux", "compte", "libelle_compte"]),
         num_rows="dynamic",
         use_container_width=True,
         key="editor_tva",
@@ -126,6 +146,7 @@ with tab_tva:
             "libelle_compte": st.column_config.TextColumn("Libellé du compte"),
         },
     )
+    edited_tva = edited_tva_df.dropna(how="all").fillna("").to_dict("records")
 
 with tab_param:
     st.markdown("Réglages généraux appliqués à toutes les conversions de ce client.")
