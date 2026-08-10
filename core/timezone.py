@@ -23,8 +23,12 @@ def to_local(value: dt.datetime | str) -> dt.datetime | None:
     fuseau applicatif. Une date naïve (sans fuseau, ex: horodatage déjà en
     heure locale mais non typé) est supposée déjà exprimée dans ce fuseau."""
     if isinstance(value, str):
+        # `datetime.fromisoformat` ne comprend le suffixe 'Z' (UTC) qu'à partir
+        # de Python 3.11 ; on le normalise en '+00:00' pour rester compatible
+        # avec les versions antérieures et avec les formats git qui l'émettent.
+        normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
         try:
-            value = dt.datetime.fromisoformat(value)
+            value = dt.datetime.fromisoformat(normalized)
         except ValueError:
             return None
     if value.tzinfo is None:
