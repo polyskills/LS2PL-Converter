@@ -99,6 +99,23 @@ def rename_client(client_id: str, nouveau_nom: str) -> None:
         json.dump(clients, f, ensure_ascii=False, indent=2)
 
 
+def set_email_config(client_id: str, tenant_id: str, mailbox: str) -> None:
+    """Renseigne le tenant M365 et la boîte mail à interroger pour la
+    réception automatique des exports LightSpeed de ce client. Les deux
+    boîtes vivent dans le tenant du CLIENT (pas celui de Polyskills) : c'est
+    ce tenant_id qui indique à quelle autorité Azure AD demander un jeton
+    (authentification "application", cf. core.graph_client), après
+    consentement admin donné par le client sur l'app multi-tenant Polyskills.
+    Champs vides = fetch automatique désactivé pour ce client."""
+    clients = list_clients()
+    for c in clients:
+        if c["id"] == client_id:
+            c["email_tenant_id"] = tenant_id.strip()
+            c["email_mailbox"] = mailbox.strip()
+    with open(CLIENTS_INDEX, "w", encoding="utf-8") as f:
+        json.dump(clients, f, ensure_ascii=False, indent=2)
+
+
 def client_dir(client_id: str) -> str:
     return os.path.join(CLIENTS_DIR, client_id)
 

@@ -1,0 +1,55 @@
+"""
+Point d'entrée du service de fetch automatique des exports LightSpeed.
+
+Boucle infinie : un cycle (core.email_poller.executer_un_cycle) toutes les
+`LSPENNYLANE_POLL_INTERVAL_SECONDS` secondes (300 par défaut). Prévu pour
+tourner comme second service Windows, indépendant de l'app Streamlit
+(voir deploy/windows).
+
+Variables d'environnement requises :
+- LSPENNYLANE_AZURE_CLIENT_ID     : App ID de l'app Azure AD Polyskills (multi-tenant)
+- LSPENNYLANE_AZURE_CLIENT_SECRET : Secret de cette app
+Optionnelle :
+- LSPENNYLANE_ALERTE_INTERNE      : adresse mail recevant les alertes et les
+                                     récapitulatifs de conversion (aucun envoi
+                                     si absente)
+- LSPENNYLANE_POLL_INTERVAL_SECONDS : intervalle entre deux cycles (défaut 300)
+
+Le tenant et la boîte mail à interroger sont, eux, configurés par client
+dans l'application (page Clients), pas ici.
+"""
+from __future__ import annotations
+
+import logging
+import os
+import time
+
+from core.bootstrap import ensure_defaults
+from core.email_poller import executer_un_cycle
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+)
+log = logging.getLogger("email_poller")
+
+
+def main() -> None:
+    for var in ("LSPENNYLANE_AZURE_CLIENT_ID", "LSPENNYLANE_AZURE_CLIENT_SECRET"):
+        if not os.environ.get(var):
+            raise SystemExit(f"Variable d'environnement manquante : {var}")
+
+    interval = int(os.environ.get("LSPENNYLANE_POLL_INTERVAL_SECONDS", "300"))
+    ensure_defaults()
+
+    log.info("Service de fetch LightSpeed démarré (intervalle %ss).", interval)
+    while True:
+        try:
+            executer_un_cycle()
+        except Exception:  # pragma: no cover - le service ne doit jamais s'arrêter sur une erreur ponctuelle
+            log.exception("Échec du cycle de fetch — nouvelle tentative au prochain intervalle.")
+        time.sleep(interval)
+
+
+if __name__ == "__main__":
+    main()

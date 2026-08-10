@@ -48,6 +48,42 @@ Le script :
 .\deploy\windows\install-service.ps1 -Port 8080 -ServiceName "LSPennylaneProd"
 ```
 
+## Service de fetch automatique des exports LightSpeed par mail (optionnel)
+
+En complément du service applicatif, `install-email-poller-service.ps1`
+installe un second service Windows qui va chercher automatiquement les
+exports LightSpeed reçus par mail (une boîte dédiée par client, hébergée
+dans le tenant M365 **du client**), les convertit avec le même moteur que
+l'import manuel, et renvoie le résultat par mail — voir `core/email_poller.py`
+pour le détail du fonctionnement.
+
+Prérequis avant installation :
+1. Une **app registration Azure AD multi-tenant** enregistrée côté Polyskills,
+   avec permission applicative `Mail.Read` + `Mail.Send` sur Microsoft Graph.
+2. Le **consentement admin** donné par chaque client sur cette app, dans son
+   propre tenant (`https://login.microsoftonline.com/<tenant_id_client>/adminconsent?client_id=<app_id>`).
+3. Trois variables d'environnement **machine** (pas juste utilisateur, sans
+   quoi le service ne les verrait pas au démarrage) :
+   ```powershell
+   [Environment]::SetEnvironmentVariable("LSPENNYLANE_AZURE_CLIENT_ID", "<app id>", "Machine")
+   [Environment]::SetEnvironmentVariable("LSPENNYLANE_AZURE_CLIENT_SECRET", "<secret>", "Machine")
+   [Environment]::SetEnvironmentVariable("LSPENNYLANE_ALERTE_INTERNE", "compta@polyskills.fr", "Machine")
+   ```
+4. Pour chaque client concerné : tenant ID + boîte mail renseignés page
+   **Clients**, et adresse mail dédiée sur chaque point de vente page
+   **Table de correspondance**.
+
+Puis, dans le même PowerShell administrateur, après `install-service.ps1` :
+```powershell
+.\deploy\windows\install-email-poller-service.ps1
+```
+
+Ce service ne renvoie **jamais** de fichier au client en cas d'échec de
+conversion (mapping manquant, fichier illisible...) — dans ce cas, seule
+l'adresse `LSPENNYLANE_ALERTE_INTERNE` est notifiée, avec le détail de
+l'erreur, pour correction manuelle du référentiel puis reprise via l'import
+manuel habituel.
+
 ## Mettre à jour l'application
 
 À chaque évolution du code (nouveau commit sur la branche) :

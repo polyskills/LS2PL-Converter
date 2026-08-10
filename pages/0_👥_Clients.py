@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from core.client_store import create_client, list_clients, rename_client
+from core.client_store import create_client, list_clients, rename_client, set_email_config
 from core.mapping_store import seed_with_examples
 from core.ui_common import select_client
 
@@ -53,4 +53,29 @@ else:
             if st.button("Enregistrer le nouveau nom", key=f"save_rename_{c['id']}"):
                 rename_client(c["id"], new_name.strip())
                 st.success("Nom mis à jour.")
+                st.rerun()
+
+            st.markdown("**Réception automatique des exports LightSpeed par mail**")
+            st.caption(
+                "La boîte mail vit dans le tenant M365 du client. Une adresse dédiée par point "
+                "de vente se paramètre dans « Table de correspondance » ; ici, uniquement le "
+                "tenant et la boîte mail à interroger. Laisser vide désactive le fetch automatique."
+            )
+            ce1, ce2 = st.columns(2)
+            tenant_id = ce1.text_input(
+                "Tenant ID Azure AD du client",
+                value=c.get("email_tenant_id", ""),
+                key=f"tenant_{c['id']}",
+                help="Identifiant du tenant M365 du client (Entra ID > Vue d'ensemble). "
+                "Nécessite le consentement admin du client sur l'app Azure AD Polyskills.",
+            )
+            mailbox = ce2.text_input(
+                "Boîte mail à interroger (UPN)",
+                value=c.get("email_mailbox", ""),
+                key=f"mailbox_{c['id']}",
+                help="Boîte partagée recevant les adresses dédiées (ex. rapport_ls_paris_bar@...).",
+            )
+            if st.button("Enregistrer la config mail", key=f"save_email_{c['id']}"):
+                set_email_config(c["id"], tenant_id, mailbox)
+                st.success("Config mail enregistrée.")
                 st.rerun()
