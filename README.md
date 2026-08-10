@@ -81,6 +81,14 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
+## Déploiement en serveur partagé (équipe, disque persistant)
+
+Pour un hébergement central accessible à toute l'équipe via navigateur,
+avec un vrai disque persistant (contrairement à Streamlit Community
+Cloud) : voir **[deploy/windows/README.md](deploy/windows/README.md)**
+(installation en service Windows via NSSM — démarrage automatique,
+redémarrage sur plantage, mise à jour et désinstallation scriptées).
+
 ## Tests
 
 ```bash

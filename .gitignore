@@ -7,3 +7,8 @@ __pycache__/
 # jamais versionnées. Sur un serveur dédié, ce dossier vit sur disque
 # persistant en dehors du dépôt git.
 data/clients/
+
+# Déploiement Windows : binaire NSSM téléchargé à l'installation, et logs
+# du service — jamais versionnés.
+deploy/windows/tools/
+logs/
