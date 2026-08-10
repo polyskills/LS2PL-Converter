@@ -1,9 +1,39 @@
 """Éléments d'interface partagés entre les pages (sélecteur de client)."""
 from __future__ import annotations
 
+import datetime as dt
+
 import streamlit as st
 
 from core.client_store import create_client, list_clients
+from core.version_info import get_version_info
+
+
+def show_version_footer() -> None:
+    """Affiche, en bas de la barre latérale, le commit Git réellement en cours
+    d'exécution — pour vérifier après un déploiement que c'est bien la dernière
+    version poussée qui tourne, plutôt que de le supposer."""
+    info = get_version_info()
+    with st.sidebar:
+        st.divider()
+        if info["hash"]:
+            date_str = info["date"]
+            try:
+                date_str = dt.datetime.fromisoformat(info["date"]).strftime("%d/%m/%Y %H:%M")
+            except (TypeError, ValueError):
+                pass
+            st.caption(
+                f"🔖 Version déployée : `{info['hash']}`"
+                + (" *(modifs. non commitées)*" if info["dirty"] else "")
+                + f"\n\nBranche `{info['branch']}` · {date_str}\n\n> {info['message']}"
+            )
+        else:
+            st.caption("🔖 Version : information Git indisponible sur cet hébergement.")
+
+        if st.button("🔄 Vider le cache et recharger", use_container_width=True):
+            st.cache_data.clear()
+            st.cache_resource.clear()
+            st.rerun()
 
 
 def select_client() -> str | None:
@@ -15,6 +45,7 @@ def select_client() -> str | None:
     équipe restreinte) : tout utilisateur de l'app voit tous les clients.
     """
     clients = list_clients()
+    selected: str | None = None
 
     with st.sidebar:
         st.markdown("### 🏢 Client")
@@ -27,19 +58,20 @@ def select_client() -> str | None:
                     st.session_state["client_id"] = c["id"]
                     st.rerun()
             st.caption("Ou rendez-vous sur la page **Clients** pour plus d'options.")
-            return None
+        else:
+            ids = [c["id"] for c in clients]
+            noms = {c["id"]: c["nom"] for c in clients}
+            current = st.session_state.get("client_id")
+            index = ids.index(current) if current in ids else 0
+            selected = st.selectbox(
+                "Client actif",
+                options=ids,
+                index=index,
+                format_func=lambda cid: noms.get(cid, cid),
+                key="client_id_selector",
+            )
+            st.session_state["client_id"] = selected
+            st.caption(f"ID technique : `{selected}`")
 
-        ids = [c["id"] for c in clients]
-        noms = {c["id"]: c["nom"] for c in clients}
-        current = st.session_state.get("client_id")
-        index = ids.index(current) if current in ids else 0
-        selected = st.selectbox(
-            "Client actif",
-            options=ids,
-            index=index,
-            format_func=lambda cid: noms.get(cid, cid),
-            key="client_id_selector",
-        )
-        st.session_state["client_id"] = selected
-        st.caption(f"ID technique : `{selected}`")
-        return selected
+    show_version_footer()
+    return selected
