@@ -69,6 +69,27 @@ def create_client(nom: str) -> dict:
     return client
 
 
+def ensure_client(client_id: str, nom: str) -> dict:
+    """Comme create_client, mais avec un identifiant fixe imposé plutôt que
+    dérivé du nom, et idempotent : ne recrée rien si le client existe déjà.
+    Utilisé pour les clients par défaut qui doivent survivre à un redémarrage
+    Streamlit Cloud (disque non persistant, data/clients/ non versionné)."""
+    _ensure_index()
+    clients = list_clients()
+    for c in clients:
+        if c["id"] == client_id:
+            return c
+
+    client = {"id": client_id, "nom": nom}
+    clients.append(client)
+    with open(CLIENTS_INDEX, "w", encoding="utf-8") as f:
+        json.dump(clients, f, ensure_ascii=False, indent=2)
+
+    os.makedirs(client_dir(client_id), exist_ok=True)
+    os.makedirs(os.path.join(client_dir(client_id), "history", "files"), exist_ok=True)
+    return client
+
+
 def rename_client(client_id: str, nouveau_nom: str) -> None:
     clients = list_clients()
     for c in clients:

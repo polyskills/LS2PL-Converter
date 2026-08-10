@@ -5,6 +5,7 @@ import datetime as dt
 
 import streamlit as st
 
+from core.bootstrap import ensure_defaults
 from core.client_store import create_client, list_clients
 from core.version_info import get_version_info
 
@@ -44,6 +45,7 @@ def select_client() -> str | None:
     ⚠️ Aucune authentification n'est appliquée à ce stade (usage interne,
     équipe restreinte) : tout utilisateur de l'app voit tous les clients.
     """
+    ensure_defaults()
     clients = list_clients()
     selected: str | None = None
 

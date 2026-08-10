@@ -120,6 +120,19 @@ def reset_to_empty(client_id: str) -> dict:
     return copy.deepcopy(EMPTY_MAPPINGS)
 
 
+def ensure_points_de_vente(client_id: str, points: list[dict]) -> None:
+    """Ajoute les points de vente listés s'ils sont absents, sans toucher au
+    reste du référentiel ni aux points de vente déjà présents (jamais de
+    suppression/écrasement) — pour re-garantir des points de vente par défaut
+    à chaque démarrage sans perdre les personnalisations faites entre-temps."""
+    mappings = load_mappings(client_id)
+    existants = {p.get("code") for p in mappings.get("points_de_vente", [])}
+    manquants = [p for p in points if p["code"] not in existants]
+    if manquants:
+        mappings.setdefault("points_de_vente", []).extend(manquants)
+        save_mappings(client_id, mappings)
+
+
 # --- Helpers de recherche (tolérants à la casse/espaces) -------------------
 
 def _norm_key(s: str) -> str:
