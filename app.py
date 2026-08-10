@@ -21,6 +21,7 @@ from core.history_store import record_conversion
 from core.lightspeed_parser import LightspeedParseError, parse_lightspeed_export
 from core.mapping_store import load_mappings
 from core.pennylane_export import build_pennylane_csv
+from core.timezone import now_local
 from core.ui_common import select_client
 
 st.set_page_config(page_title="LightSpeed → Pennylane", page_icon="🧾", layout="wide")
@@ -85,7 +86,7 @@ if uploaded_files:
                     help="Ce code, combiné au compte comptable, détermine le code analytique généré.",
                 )
             with c2:
-                default_date = dt.date.today()
+                default_date = now_local().date()
                 if export.date_detectee:
                     try:
                         d, m, y = export.date_detectee.split("/")
@@ -158,7 +159,7 @@ if uploaded_files:
 
         if st.button("🔄 Lancer la conversion", type="primary"):
             resultats = []
-            horodatage = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            horodatage = now_local().strftime("%Y-%m-%d %H:%M:%S")
             for cfg in file_configs:
                 res = convert(
                     cfg["export"],
@@ -229,7 +230,7 @@ if uploaded_files:
             st.subheader("4. Télécharger le fichier Pennylane")
             tous_ok = all(r.sans_erreur for r in resultats)
             csv_bytes = build_pennylane_csv(resultats)
-            fname = f"import_pennylane_{dt.date.today().strftime('%Y%m%d')}.csv"
+            fname = f"import_pennylane_{now_local().strftime('%Y%m%d')}.csv"
 
             st.download_button(
                 "⬇️ Télécharger le fichier d'import Pennylane (.csv)",

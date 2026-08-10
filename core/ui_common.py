@@ -1,12 +1,11 @@
 """Éléments d'interface partagés entre les pages (sélecteur de client)."""
 from __future__ import annotations
 
-import datetime as dt
-
 import streamlit as st
 
 from core.bootstrap import ensure_defaults
 from core.client_store import create_client, list_clients
+from core.timezone import to_local
 from core.version_info import get_version_info
 
 
@@ -19,10 +18,9 @@ def show_version_footer() -> None:
         st.divider()
         if info["hash"]:
             date_str = info["date"]
-            try:
-                date_str = dt.datetime.fromisoformat(info["date"]).strftime("%d/%m/%Y %H:%M")
-            except (TypeError, ValueError):
-                pass
+            local_dt = to_local(info["date"]) if info["date"] else None
+            if local_dt is not None:
+                date_str = local_dt.strftime("%d/%m/%Y %H:%M") + " (heure de Paris)"
             st.caption(
                 f"🔖 Version déployée : `{info['hash']}`"
                 + (" *(modifs. non commitées)*" if info["dirty"] else "")
