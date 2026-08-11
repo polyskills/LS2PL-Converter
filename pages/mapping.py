@@ -11,7 +11,7 @@ from core.mapping_store import load_mappings, reset_to_empty, save_mappings, see
 from core.ui_common import select_client
 
 
-def _as_editable_df(rows: list[dict], columns: list[str]) -> pd.DataFrame:
+def _as_editable_df(rows: list[dict], columns: list[str], tri: str | list[str] | None = None) -> pd.DataFrame:
     """st.data_editor ne sait pas proposer de bouton '+' d'ajout de ligne sur une
     liste Python vide : sans colonnes connues, il n'a rien à afficher. On force
     donc toujours un DataFrame avec les colonnes attendues, même à 0 ligne.
@@ -22,10 +22,21 @@ def _as_editable_df(rows: list[dict], columns: list[str]) -> pd.DataFrame:
     TextColumn refuse ("not compatible... float"). Toutes nos colonnes sont du
     texte (y compris les codes numériques comme "70110010", traités comme des
     chaînes) : fillna("").astype(str) force donc explicitement le type texte
-    partout, plutôt que de le laisser deviner par pandas."""
+    partout, plutôt que de le laisser deviner par pandas.
+
+    tri : colonne(s) selon laquelle trier alphabétiquement (insensible à la
+    casse) avant affichage. Streamlit désactive le tri interactif (clic sur
+    l'en-tête) dès que num_rows="dynamic" (nécessaire ici pour pouvoir
+    ajouter/supprimer des lignes) : impossible d'avoir les deux à la fois côté
+    composant, donc on trie nous-mêmes la donnée en amont plutôt que de
+    sacrifier l'ajout/suppression en ligne."""
     if not rows:
         return pd.DataFrame(columns=columns)
-    return pd.DataFrame(rows).reindex(columns=columns).fillna("").astype(str)
+    df = pd.DataFrame(rows).reindex(columns=columns).fillna("").astype(str)
+    if tri:
+        cles = [tri] if isinstance(tri, str) else tri
+        df = df.sort_values(by=cles, key=lambda s: s.str.casefold(), kind="stable").reset_index(drop=True)
+    return df
 
 
 def _options_avec_libelle(rows: list[dict], code_key: str, libelle_key: str) -> list[str]:
@@ -99,7 +110,9 @@ with tab_pdv:
         "réception automatique). Elle doit être unique entre tous les clients."
     )
     edited_pdv_df = st.data_editor(
-        _as_editable_df(mappings.get("points_de_vente", []), ["code", "libelle", "adresse_email", "commentaires"]),
+        _as_editable_df(
+            mappings.get("points_de_vente", []), ["code", "libelle", "adresse_email", "commentaires"], tri="code"
+        ),
         num_rows="dynamic",
         use_container_width=True,
         key="editor_pdv",
@@ -124,7 +137,9 @@ with tab_comptes:
         "LightSpeed, pas ici."
     )
     edited_comptes_df = st.data_editor(
-        _as_editable_df(mappings.get("comptes_de_vente", []), ["compte", "libelle_compte", "commentaires"]),
+        _as_editable_df(
+            mappings.get("comptes_de_vente", []), ["compte", "libelle_compte", "commentaires"], tri="compte"
+        ),
         num_rows="dynamic",
         use_container_width=True,
         key="editor_comptes",
@@ -154,7 +169,11 @@ with tab_departements:
         for d in mappings.get("departements", [])
     ]
     edited_departements_df = st.data_editor(
-        _as_editable_df(departements_source, ["categorie_lightspeed", "compte", "taux_tva", "commentaires"]),
+        _as_editable_df(
+            departements_source,
+            ["categorie_lightspeed", "compte", "taux_tva", "commentaires"],
+            tri="categorie_lightspeed",
+        ),
         num_rows="dynamic",
         use_container_width=True,
         key="editor_departements",
@@ -180,7 +199,11 @@ with tab_codes_analytiques:
         "cas ici."
     )
     edited_codes_analytiques_df = st.data_editor(
-        _as_editable_df(mappings.get("codes_analytiques", []), ["code_analytique", "description", "commentaires"]),
+        _as_editable_df(
+            mappings.get("codes_analytiques", []),
+            ["code_analytique", "description", "commentaires"],
+            tri="code_analytique",
+        ),
         num_rows="dynamic",
         use_container_width=True,
         key="editor_codes_analytiques",
@@ -224,6 +247,7 @@ with tab_attribution:
         _as_editable_df(
             attribution_source,
             ["compte", "point_de_vente", "categorie_lightspeed", "famille", "code_analytique", "commentaires"],
+            tri=["point_de_vente", "categorie_lightspeed", "compte"],
         ),
         num_rows="dynamic",
         use_container_width=True,
@@ -262,7 +286,11 @@ with tab_paiement:
         "(l'écriture serait déséquilibrée)."
     )
     edited_paiement_df = st.data_editor(
-        _as_editable_df(mappings.get("comptes_paiement", []), ["mode_paiement", "compte", "libelle_compte", "commentaires"]),
+        _as_editable_df(
+            mappings.get("comptes_paiement", []),
+            ["mode_paiement", "compte", "libelle_compte", "commentaires"],
+            tri="mode_paiement",
+        ),
         num_rows="dynamic",
         use_container_width=True,
         key="editor_paiement",
@@ -278,7 +306,9 @@ with tab_paiement:
 with tab_tva:
     st.markdown("Compte de **TVA collectée** à utiliser pour chaque taux de TVA rencontré dans les ventes.")
     edited_tva_df = st.data_editor(
-        _as_editable_df(mappings.get("comptes_tva", []), ["taux", "compte", "libelle_compte", "commentaires"]),
+        _as_editable_df(
+            mappings.get("comptes_tva", []), ["taux", "compte", "libelle_compte", "commentaires"], tri="taux"
+        ),
         num_rows="dynamic",
         use_container_width=True,
         key="editor_tva",
