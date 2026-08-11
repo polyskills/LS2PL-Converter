@@ -15,10 +15,10 @@ produire la **famille** et le **code analytique** attendus par Pennylane.
 
 ## Fonctionnement
 
-1. **Clients** (`pages/0_👥_Clients.py`) : chaque client dispose d'un espace
-   isolé (référentiel + historique). Aucune authentification à ce stade
-   (usage interne, équipe restreinte) — à durcir avant tout accès externe.
-2. **Import** (`app.py`) : dépose d'un ou plusieurs fichiers export
+1. **Clients** (`pages/clients.py`, menu « Gestion ») : chaque client dispose
+   d'un espace isolé (référentiel + historique). Aucune authentification à ce
+   stade (usage interne, équipe restreinte) — à durcir avant tout accès externe.
+2. **Import** (`pages/converter.py`) : dépose d'un ou plusieurs fichiers export
    LightSpeed pour le client sélectionné. Chaque fichier est parsé
    (catégories de vente avec un nombre *variable* de taux de TVA, modes de
    paiement, report éventuel de la veille). Un contrôle de premier niveau,
@@ -38,7 +38,7 @@ produire la **famille** et le **code analytique** attendus par Pennylane.
 5. **Export** (`core/pennylane_export.py`) : génération du fichier `.csv`
    au format d'import avancé Pennylane (mêmes 18 colonnes que le modèle
    officiel), téléchargeable depuis l'interface.
-6. **Historique** (`pages/2_🕓_Historique.py`, `core/history_store.py`) :
+6. **Historique** (`pages/historique.py`, menu « Gestion », `core/history_store.py`) :
    **chaque tentative de conversion est archivée**, réussie ou non — fichier
    source, fichier généré, statut (OK / AVERTISSEMENT / ERREUR), indicateurs
    de contrôle, avertissements et erreurs. Détection informative des jours

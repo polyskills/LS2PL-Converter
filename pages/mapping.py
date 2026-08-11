@@ -10,8 +10,6 @@ import streamlit as st
 from core.mapping_store import load_mappings, reset_to_empty, save_mappings, seed_with_examples
 from core.ui_common import select_client
 
-st.set_page_config(page_title="Table de correspondance", page_icon="🗂️", layout="wide")
-
 
 def _as_editable_df(rows: list[dict], columns: list[str]) -> pd.DataFrame:
     """st.data_editor ne sait pas proposer de bouton '+' d'ajout de ligne sur une
@@ -27,7 +25,8 @@ st.title("🗂️ Table de correspondance")
 st.caption(
     "LightSpeed ne gère pas de code analytique : c'est la combinaison "
     "**compte comptable × point de vente** qui permet de le reconstituer. "
-    "Paramétrez ici les tables utilisées par la conversion, propres au client sélectionné."
+    "Paramétrez ici les tables utilisées par la conversion, propres au client sélectionné. "
+    "Les réglages généraux (code journal, compte d'écart...) se trouvent page **Réglages**."
 )
 
 if client_id is None:
@@ -35,14 +34,13 @@ if client_id is None:
 
 mappings = load_mappings(client_id)
 
-tab_pdv, tab_ventes, tab_analytique, tab_paiement, tab_tva, tab_param = st.tabs(
+tab_pdv, tab_ventes, tab_analytique, tab_paiement, tab_tva = st.tabs(
     [
         "Points de vente",
         "Comptes de vente",
         "Codes analytiques",
         "Contreparties de paiement",
         "TVA collectée",
-        "Paramètres généraux",
     ]
 )
 
@@ -157,46 +155,13 @@ with tab_tva:
     )
     edited_tva = edited_tva_df.dropna(how="all").fillna("").to_dict("records")
 
-with tab_param:
-    st.markdown("Réglages généraux appliqués à toutes les conversions de ce client.")
-    params = mappings.get("parametres", {})
-    c1, c2 = st.columns(2)
-    with c1:
-        code_journal = st.text_input("Code journal par défaut", value=params.get("code_journal", "VT"))
-        code_pays = st.text_input("Code pays du compte", value=params.get("code_pays", "FR"))
-        devise = st.text_input("Devise", value=params.get("devise", "EUR"))
-        famille = st.text_input(
-            "Famille analytique par défaut (si non précisée ligne par ligne)",
-            value=params.get("famille_categorie_analytique", "POINT_DE_VENTE"),
-        )
-    with c2:
-        compte_ecart = st.text_input("Compte d'écart / report (équilibrage)", value=params.get("compte_ecart", "471000"))
-        libelle_ecart = st.text_input(
-            "Libellé du compte d'écart", value=params.get("libelle_compte_ecart", "Compte d'attente - écart de report LightSpeed")
-        )
-        tolerance = st.number_input(
-            "Tolérance de rapprochement du report (€)",
-            value=float(params.get("tolerance_equilibrage", 0.02)),
-            step=0.01,
-            format="%.2f",
-        )
-    edited_params = {
-        "code_journal": code_journal,
-        "code_pays": code_pays,
-        "devise": devise,
-        "famille_categorie_analytique": famille,
-        "compte_ecart": compte_ecart,
-        "libelle_compte_ecart": libelle_ecart,
-        "tolerance_equilibrage": tolerance,
-    }
-
 st.divider()
 b1, b2, _ = st.columns([1, 1, 4])
 if b1.button("💾 Enregistrer les tables de correspondance", type="primary"):
     save_mappings(
         client_id,
         {
-            "parametres": edited_params,
+            **mappings,
             "points_de_vente": edited_pdv,
             "comptes_ventes": edited_ventes,
             "comptes_analytiques": edited_analytique,

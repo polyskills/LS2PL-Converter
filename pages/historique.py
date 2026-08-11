@@ -12,8 +12,6 @@ import streamlit as st
 from core.history_store import detect_missing_days, list_history
 from core.ui_common import select_client
 
-st.set_page_config(page_title="Historique", page_icon="🕓", layout="wide")
-
 client_id = select_client()
 
 st.title("🕓 Historique des conversions")

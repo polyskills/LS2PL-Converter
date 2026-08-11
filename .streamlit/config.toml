@@ -1,0 +1,6 @@
+# Thème de l'application. Seule la couleur de fond secondaire (barre latérale
+# + widgets) est ajustée par rapport au défaut Streamlit, pour distinguer
+# plus nettement la barre latérale de la zone de contenu principale.
+[theme]
+base = "light"
+secondaryBackgroundColor = "#E3E6EC"
