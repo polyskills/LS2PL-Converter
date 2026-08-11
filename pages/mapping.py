@@ -17,10 +17,15 @@ def _as_editable_df(rows: list[dict], columns: list[str]) -> pd.DataFrame:
     donc toujours un DataFrame avec les colonnes attendues, même à 0 ligne.
     reindex() (plutôt que juste indexer par la liste des colonnes) tolère aussi
     une colonne demandée mais absente de toutes les lignes existantes (ex. un
-    champ ajouté après coup, comme "commentaires") sans lever de KeyError."""
+    champ ajouté après coup, comme "commentaires") sans lever de KeyError -
+    mais une colonne ainsi créée de toutes pièces est en float64 (NaN), ce que
+    TextColumn refuse ("not compatible... float"). Toutes nos colonnes sont du
+    texte (y compris les codes numériques comme "70110010", traités comme des
+    chaînes) : fillna("").astype(str) force donc explicitement le type texte
+    partout, plutôt que de le laisser deviner par pandas."""
     if not rows:
         return pd.DataFrame(columns=columns)
-    return pd.DataFrame(rows).reindex(columns=columns)
+    return pd.DataFrame(rows).reindex(columns=columns).fillna("").astype(str)
 
 client_id = select_client()
 
