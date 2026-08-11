@@ -14,10 +14,13 @@ from core.ui_common import select_client
 def _as_editable_df(rows: list[dict], columns: list[str]) -> pd.DataFrame:
     """st.data_editor ne sait pas proposer de bouton '+' d'ajout de ligne sur une
     liste Python vide : sans colonnes connues, il n'a rien à afficher. On force
-    donc toujours un DataFrame avec les colonnes attendues, même à 0 ligne."""
+    donc toujours un DataFrame avec les colonnes attendues, même à 0 ligne.
+    reindex() (plutôt que juste indexer par la liste des colonnes) tolère aussi
+    une colonne demandée mais absente de toutes les lignes existantes (ex. un
+    champ ajouté après coup, comme "commentaires") sans lever de KeyError."""
     if not rows:
         return pd.DataFrame(columns=columns)
-    return pd.DataFrame(rows)[columns]
+    return pd.DataFrame(rows).reindex(columns=columns)
 
 client_id = select_client()
 
@@ -52,7 +55,7 @@ with tab_pdv:
         "réception automatique). Elle doit être unique entre tous les clients."
     )
     edited_pdv_df = st.data_editor(
-        _as_editable_df(mappings.get("points_de_vente", []), ["code", "libelle", "adresse_email"]),
+        _as_editable_df(mappings.get("points_de_vente", []), ["code", "libelle", "adresse_email", "commentaires"]),
         num_rows="dynamic",
         use_container_width=True,
         key="editor_pdv",
@@ -63,6 +66,7 @@ with tab_pdv:
                 "Adresse mail de réception (optionnelle)",
                 help="Adresse dédiée qui reçoit l'export automatique LightSpeed de ce point de vente.",
             ),
+            "commentaires": st.column_config.TextColumn("Commentaires"),
         },
     )
     edited_pdv = edited_pdv_df.dropna(how="all").fillna("").to_dict("records")
@@ -76,7 +80,7 @@ with tab_ventes:
     edited_ventes_df = st.data_editor(
         _as_editable_df(
             mappings.get("comptes_ventes", []),
-            ["categorie_lightspeed", "compte", "libelle_compte", "taux_tva"],
+            ["categorie_lightspeed", "compte", "libelle_compte", "taux_tva", "commentaires"],
         ),
         num_rows="dynamic",
         use_container_width=True,
@@ -86,6 +90,7 @@ with tab_ventes:
             "compte": st.column_config.TextColumn("Compte Pennylane", required=True),
             "libelle_compte": st.column_config.TextColumn("Libellé du compte"),
             "taux_tva": st.column_config.SelectboxColumn("Taux TVA nominal", options=["0%", "5.5%", "10%", "20%"]),
+            "commentaires": st.column_config.TextColumn("Commentaires"),
         },
     )
     edited_ventes = edited_ventes_df.dropna(how="all").fillna("").to_dict("records")
@@ -100,7 +105,7 @@ with tab_analytique:
     edited_analytique_df = st.data_editor(
         _as_editable_df(
             mappings.get("comptes_analytiques", []),
-            ["compte", "point_de_vente", "famille", "code_analytique"],
+            ["compte", "point_de_vente", "famille", "code_analytique", "commentaires"],
         ),
         num_rows="dynamic",
         use_container_width=True,
@@ -114,6 +119,7 @@ with tab_analytique:
             ),
             "famille": st.column_config.TextColumn("Famille analytique", required=True),
             "code_analytique": st.column_config.TextColumn("Code analytique généré", required=True),
+            "commentaires": st.column_config.TextColumn("Commentaires"),
         },
     )
     edited_analytique = edited_analytique_df.dropna(how="all").fillna("").to_dict("records")
@@ -126,7 +132,7 @@ with tab_paiement:
         "(l'écriture serait déséquilibrée)."
     )
     edited_paiement_df = st.data_editor(
-        _as_editable_df(mappings.get("comptes_paiement", []), ["mode_paiement", "compte", "libelle_compte"]),
+        _as_editable_df(mappings.get("comptes_paiement", []), ["mode_paiement", "compte", "libelle_compte", "commentaires"]),
         num_rows="dynamic",
         use_container_width=True,
         key="editor_paiement",
@@ -134,6 +140,7 @@ with tab_paiement:
             "mode_paiement": st.column_config.TextColumn("Mode de paiement LightSpeed", required=True),
             "compte": st.column_config.TextColumn("Compte de contrepartie", required=True),
             "libelle_compte": st.column_config.TextColumn("Libellé du compte"),
+            "commentaires": st.column_config.TextColumn("Commentaires"),
         },
     )
     edited_paiement = edited_paiement_df.dropna(how="all").fillna("").to_dict("records")
@@ -141,7 +148,7 @@ with tab_paiement:
 with tab_tva:
     st.markdown("Compte de **TVA collectée** à utiliser pour chaque taux de TVA rencontré dans les ventes.")
     edited_tva_df = st.data_editor(
-        _as_editable_df(mappings.get("comptes_tva", []), ["taux", "compte", "libelle_compte"]),
+        _as_editable_df(mappings.get("comptes_tva", []), ["taux", "compte", "libelle_compte", "commentaires"]),
         num_rows="dynamic",
         use_container_width=True,
         key="editor_tva",
@@ -151,6 +158,7 @@ with tab_tva:
             ),
             "compte": st.column_config.TextColumn("Compte de TVA collectée", required=True),
             "libelle_compte": st.column_config.TextColumn("Libellé du compte"),
+            "commentaires": st.column_config.TextColumn("Commentaires"),
         },
     )
     edited_tva = edited_tva_df.dropna(how="all").fillna("").to_dict("records")
