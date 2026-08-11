@@ -1,0 +1,72 @@
+# Fetch automatique des exports LightSpeed par mail
+
+Fonctionnement détaillé de la réception automatique — en complément de la
+checklist de mise en route ([mise_en_route.md](mise_en_route.md)) et des
+commandes d'installation du service
+([deploy/windows/README.md](../deploy/windows/README.md)).
+
+## Pourquoi
+
+Sans ce service, chaque export LightSpeed doit être déposé manuellement
+dans la page Convertisseur. Avec, l'export reçu par mail est identifié,
+converti et renvoyé automatiquement, sans intervention.
+
+## Principe : identifier par l'adresse, pas par le nom de fichier
+
+Chaque **point de vente** d'un client peut avoir sa propre adresse mail
+dédiée (champ `adresse_email`, page Table de correspondance). LightSpeed
+est configuré pour envoyer l'export comptable automatique de ce point de
+vente à cette adresse. À la réception :
+
+1. l'adresse **destinataire** du mail suffit à elle seule à retrouver
+   **client + point de vente** (`core.mapping_store.find_client_pdv_by_email`) ;
+2. le **nom de fichier** ne sert qu'à extraire la **période couverte**
+   (`core.email_ingest.extraire_periode`), pour pré-remplir la date de
+   pièce — jamais à identifier le client, moins fiable.
+
+C'est délibéré : une adresse mal configurée déclenche une alerte interne
+immédiate (adresse inconnue), alors qu'un nom de fichier mal interprété
+aurait pu convertir silencieusement sur le mauvais référentiel.
+
+## Où vivent les boîtes mail
+
+Les boîtes mail vivent dans le **tenant M365 du client**, pas celui de
+Polyskills. Une seule app Azure AD, enregistrée en **multi-tenant** côté
+Polyskills (permissions applicatives Graph `Mail.Read` + `Mail.Send`), est
+réutilisée pour tous les clients : c'est le `tenant_id` renseigné par
+client (page Réglages) qui détermine quelle autorité Azure AD émet le
+jeton d'accès. Chaque client doit donner, une fois, son **consentement
+admin** à cette app sur son propre tenant.
+
+## Déroulé d'un cycle (`core/email_poller.py`)
+
+Pour chaque client ayant un tenant + une boîte mail configurés :
+
+1. liste les mails non lus avec pièce jointe de la boîte ;
+2. pour chaque pièce jointe reconnue (`.xls`/`.xlsx`/`.csv`) :
+   - adresse destinataire inconnue → **alerte interne**, mail marqué lu ;
+   - adresse connue → parse + convertit avec le référentiel du client
+     identifié, **exactement le même moteur** que l'import manuel
+     (`core.lightspeed_parser` → `core.converter` → `core.pennylane_export`) ;
+   - la tentative est **archivée dans l'historique** du client, succès ou
+     échec ;
+   - succès → réponse avec fichier source + CSV généré et un récapitulatif ;
+   - échec (mapping manquant, fichier illisible...) → **alerte interne
+     uniquement**, jamais de fichier erroné envoyé au client ;
+3. le mail source est marqué lu.
+
+## Composants
+
+| Fichier | Rôle |
+|---|---|
+| `core/graph_client.py` | Client HTTP minimal Microsoft Graph, authentification "application" (msal) |
+| `core/email_ingest.py` | Identification déterministe (adresse → client/pdv, nom de fichier → période) |
+| `core/email_poller.py` | Orchestration d'un cycle, testable sans réseau (faux client Graph) |
+| `email_poller.py` | Point d'entrée : boucle infinie + intervalle, à déployer en service Windows |
+| `tests/test_email_poller.py` | Cas nominal, adresse inconnue, mapping manquant, client sans fetch configuré |
+
+## État actuel
+
+⚠️ Non testé en conditions réelles (pas encore de tenant client ni de
+consentement admin obtenu). La logique métier est couverte par les tests
+automatisés, mais un premier essai réel reste à faire.

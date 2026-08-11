@@ -25,6 +25,9 @@ pages = {
     "Paramètres": [
         st.Page("pages/reglages.py", title="Réglages", icon="⚙️"),
     ],
+    "Documentation": [
+        st.Page("pages/documentation.py", title="Documentation", icon="📚"),
+    ],
 }
 
 pg = st.navigation(pages)
