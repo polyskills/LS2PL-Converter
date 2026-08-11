@@ -51,14 +51,25 @@ dur dans le code), propres à chaque client, persistées dans
 `data/clients/<client_id>/mappings.json` :
 
 - **Points de vente** : liste des sites/points de vente du client.
-- **Comptes de vente** : catégorie LightSpeed → compte général Pennylane.
-- **Codes analytiques** : (compte comptable, point de vente) → famille +
-  code analytique.
+- **Comptes de vente** : référentiel pur des comptes Pennylane (code +
+  libellé), indépendant de LightSpeed — sert à proposer une liste de choix
+  fiable (menu déroulant) plutôt que de la saisie libre dans les deux
+  tables suivantes.
+- **Départements LightSpeed** : département LightSpeed (LightSpeed n'a pas
+  de notion de catégorie distincte du département — c'est la valeur de la
+  colonne « Références comptables » de l'export) → compte de vente (choisi
+  dans le référentiel ci-dessus) + taux de TVA nominal, informatif (le taux
+  réellement appliqué à chaque ligne vient du fichier LightSpeed lui-même).
+- **Codes analytiques** : (compte comptable, point de vente, département)
+  → famille + code analytique. Les trois critères sont nécessaires : un
+  même compte peut porter un code analytique différent selon le
+  département, même sur un seul et même point de vente.
 - **Contreparties de paiement** : mode de paiement LightSpeed → compte de
   banque/caisse/créance plateforme.
 - **TVA collectée** : taux de TVA → compte de TVA collectée.
-- **Paramètres généraux** : code journal, code pays, compte d'écart
-  utilisé pour équilibrer un éventuel report d'encaissement, etc.
+- **Paramètres généraux** (page Réglages) : code journal, code pays,
+  compte d'écart utilisé pour équilibrer un éventuel report d'encaissement,
+  etc.
 
 Un jeu d'exemple (repris de la logique du fichier « Patch Lightspeed vers
 Pennylane » transmis) peut être injecté à la création d'un client, à des

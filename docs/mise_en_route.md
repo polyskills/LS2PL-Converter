@@ -10,11 +10,14 @@ purement indicatives — comptes 511100/530000/445711.../etc. n'ont aucune
 valeur réelle) :
 
 - [ ] **Points de vente** : un par site/salle/activité réellement facturé
-- [ ] **Comptes de vente** : une ligne par catégorie LightSpeed *effectivement
-  rencontrée* dans les exports du client (sinon la conversion sera bloquée
-  dès la première catégorie absente)
+- [ ] **Comptes de vente** : le référentiel des comptes de vente Pennylane
+  utilisés (sert de liste de choix aux deux tables suivantes)
+- [ ] **Départements LightSpeed** : une ligne par département LightSpeed
+  *effectivement rencontré* dans les exports du client, avec son compte de
+  vente choisi (sinon la conversion sera bloquée dès le premier département
+  sans compte)
 - [ ] **Codes analytiques** : une ligne par combinaison (compte, point de
-  vente) réellement utilisée
+  vente, département) réellement utilisée
 - [ ] **Contreparties de paiement** : une ligne par mode de paiement
   LightSpeed du client (Carte bleue, Espèces, Deliveroo, UberEats,
   Lightspeed Payments...)

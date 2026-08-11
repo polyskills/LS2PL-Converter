@@ -27,7 +27,7 @@ client_id = select_client()
 st.title("🗂️ Table de correspondance")
 st.caption(
     "LightSpeed ne gère pas de code analytique : c'est la combinaison "
-    "**compte comptable × point de vente** qui permet de le reconstituer. "
+    "**compte comptable × point de vente × département** qui permet de le reconstituer. "
     "Paramétrez ici les tables utilisées par la conversion, propres au client sélectionné. "
     "Les réglages généraux (code journal, compte d'écart...) se trouvent page **Réglages**."
 )
@@ -37,10 +37,11 @@ if client_id is None:
 
 mappings = load_mappings(client_id)
 
-tab_pdv, tab_ventes, tab_analytique, tab_paiement, tab_tva = st.tabs(
+tab_pdv, tab_comptes, tab_departements, tab_analytique, tab_paiement, tab_tva = st.tabs(
     [
         "Points de vente",
         "Comptes de vente",
+        "Départements LightSpeed",
         "Codes analytiques",
         "Contreparties de paiement",
         "TVA collectée",
@@ -71,51 +72,86 @@ with tab_pdv:
     )
     edited_pdv = edited_pdv_df.dropna(how="all").fillna("").to_dict("records")
 
-with tab_ventes:
+with tab_comptes:
     st.markdown(
-        "Correspondance entre chaque **catégorie / référence comptable LightSpeed** "
-        "(colonne « Références comptables » de l'export) et le **compte général de vente Pennylane**. "
-        "Toute catégorie rencontrée dans un fichier importé et absente d'ici bloquera l'export."
+        "**Référentiel des comptes de vente Pennylane** (plan comptable), indépendant de LightSpeed. "
+        "Sert uniquement à proposer une liste de comptes valides (menu déroulant) dans les tables "
+        "« Départements LightSpeed » et « Codes analytiques », pour éviter les erreurs de saisie — "
+        "c'est *là-bas* que se fait le lien avec les catégories LightSpeed, pas ici."
     )
-    edited_ventes_df = st.data_editor(
-        _as_editable_df(
-            mappings.get("comptes_ventes", []),
-            ["categorie_lightspeed", "compte", "libelle_compte", "taux_tva", "commentaires"],
-        ),
+    edited_comptes_df = st.data_editor(
+        _as_editable_df(mappings.get("comptes_de_vente", []), ["compte", "libelle_compte", "commentaires"]),
         num_rows="dynamic",
         use_container_width=True,
-        key="editor_ventes",
+        key="editor_comptes",
         column_config={
-            "categorie_lightspeed": st.column_config.TextColumn("Catégorie LightSpeed", required=True),
-            "compte": st.column_config.TextColumn("Compte Pennylane", required=True),
-            "libelle_compte": st.column_config.TextColumn("Libellé du compte"),
-            "taux_tva": st.column_config.SelectboxColumn("Taux TVA nominal", options=["0%", "5.5%", "10%", "20%"]),
+            "compte": st.column_config.TextColumn("Compte", required=True),
+            "libelle_compte": st.column_config.TextColumn("Libellé du compte", required=True),
             "commentaires": st.column_config.TextColumn("Commentaires"),
         },
     )
-    edited_ventes = edited_ventes_df.dropna(how="all").fillna("").to_dict("records")
+    edited_comptes = edited_comptes_df.dropna(how="all").fillna("").to_dict("records")
+    comptes_options = [c["compte"] for c in edited_comptes if c.get("compte")]
+
+with tab_departements:
+    st.markdown(
+        "Correspondance entre chaque **département LightSpeed** (colonne « Références comptables » "
+        "de l'export — LightSpeed n'a pas de notion de catégorie distincte du département) et son "
+        "**compte de vente** (choisi dans le référentiel de l'onglet précédent). Le **taux de TVA** "
+        "ici est purement informatif : le taux réellement appliqué à chaque ligne vient du fichier "
+        "LightSpeed lui-même, pas de cette table. Tout département rencontré dans un fichier importé "
+        "et absent d'ici bloquera l'export ; un département présent mais sans compte choisi bloque "
+        "également (mieux vaut bloquer que deviner)."
+    )
+    if not comptes_options:
+        st.warning("Ajoutez d'abord des comptes dans l'onglet « Comptes de vente » pour pouvoir les choisir ici.")
+    edited_departements_df = st.data_editor(
+        _as_editable_df(
+            mappings.get("departements", []),
+            ["categorie_lightspeed", "compte", "taux_tva", "commentaires"],
+        ),
+        num_rows="dynamic",
+        use_container_width=True,
+        key="editor_departements",
+        column_config={
+            "categorie_lightspeed": st.column_config.TextColumn("Département LightSpeed", required=True),
+            "compte": st.column_config.SelectboxColumn("Compte de vente", options=comptes_options),
+            "taux_tva": st.column_config.SelectboxColumn(
+                "Taux TVA nominal (informatif)", options=["0%", "5.5%", "10%", "20%"]
+            ),
+            "commentaires": st.column_config.TextColumn("Commentaires"),
+        },
+    )
+    edited_departements = edited_departements_df.dropna(how="all").fillna("").to_dict("records")
 
 with tab_analytique:
     st.markdown(
-        "Pour un **compte comptable** donné et un **point de vente** donné, la **famille analytique** "
-        "et le **code analytique** à générer. C'est cette table qui « rejoue » l'analytique que "
-        "LightSpeed ne fournit pas. Toute combinaison (compte, point de vente) rencontrée à la "
-        "conversion et absente d'ici bloquera l'export."
+        "Pour un **compte comptable**, un **point de vente** et un **département LightSpeed** donnés, "
+        "la **famille analytique** et le **code analytique** à générer. C'est cette table qui « rejoue » "
+        "l'analytique que LightSpeed ne fournit pas — les trois critères sont nécessaires : un même "
+        "compte peut porter un code analytique différent selon le département, même sur un seul et "
+        "même point de vente (ex. un compte de boisson peut être « Sommellerie » ou « Bar » selon le "
+        "département d'origine). Toute combinaison rencontrée à la conversion et absente d'ici bloquera "
+        "l'export."
     )
+    departements_options = [d["categorie_lightspeed"] for d in edited_departements if d.get("categorie_lightspeed")]
     edited_analytique_df = st.data_editor(
         _as_editable_df(
             mappings.get("comptes_analytiques", []),
-            ["compte", "point_de_vente", "famille", "code_analytique", "commentaires"],
+            ["compte", "point_de_vente", "categorie_lightspeed", "famille", "code_analytique", "commentaires"],
         ),
         num_rows="dynamic",
         use_container_width=True,
         key="editor_analytique",
         column_config={
-            "compte": st.column_config.TextColumn("Compte comptable", required=True),
+            "compte": st.column_config.SelectboxColumn("Compte comptable", options=comptes_options, required=True),
             "point_de_vente": st.column_config.SelectboxColumn(
                 "Point de vente",
                 options=[p["code"] for p in edited_pdv] if edited_pdv else [],
                 required=True,
+            ),
+            "categorie_lightspeed": st.column_config.SelectboxColumn(
+                "Département LightSpeed", options=departements_options, required=True
             ),
             "famille": st.column_config.TextColumn("Famille analytique", required=True),
             "code_analytique": st.column_config.TextColumn("Code analytique généré", required=True),
@@ -171,7 +207,8 @@ if b1.button("💾 Enregistrer les tables de correspondance", type="primary"):
         {
             **mappings,
             "points_de_vente": edited_pdv,
-            "comptes_ventes": edited_ventes,
+            "comptes_de_vente": edited_comptes,
+            "departements": edited_departements,
             "comptes_analytiques": edited_analytique,
             "comptes_paiement": edited_paiement,
             "comptes_tva": edited_tva,

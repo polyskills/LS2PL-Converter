@@ -80,10 +80,30 @@ def test_convert_balances_and_preserves_ca():
 
 def test_missing_mapping_reports_error_and_ca_mismatch():
     export = parse_lightspeed_export(_build_sample_xlsx(), "test_export.xlsx")
-    mappings = {**DEFAULT_MAPPINGS, "comptes_ventes": []}
+    mappings = {**DEFAULT_MAPPINGS, "departements": []}
     res = convert(export, mappings, point_de_vente="REST", date_piece="26/05/26", numero_piece="LS-TEST")
     assert not res.ca_ok
     assert any("non mappée" in a for a in res.avertissements)
+
+
+def test_departement_sans_compte_bloque_export():
+    """Un département connu mais dont le compte de vente n'a pas encore été
+    choisi (paramétrage en cours) doit bloquer, pas être traité comme un
+    département totalement inconnu ni pire, silencieusement ignoré."""
+    export = parse_lightspeed_export(_build_sample_xlsx(), "test_export.xlsx")
+    mappings = {
+        **DEFAULT_MAPPINGS,
+        "departements": [
+            {"categorie_lightspeed": "Alcool (200)", "compte": "", "taux_tva": "20%"},
+            {"categorie_lightspeed": "Cuisine - Entrée", "compte": "", "taux_tva": "10%"},
+            {"categorie_lightspeed": "Cuisine - Plat", "compte": "", "taux_tva": "10%"},
+            {"categorie_lightspeed": "Softs", "compte": "", "taux_tva": "10%"},
+            {"categorie_lightspeed": "Vin et Champagne", "compte": "", "taux_tva": "20%"},
+        ],
+    }
+    res = convert(export, mappings, point_de_vente="REST", date_piece="26/05/26", numero_piece="LS-TEST")
+    assert not res.sans_erreur
+    assert any("sans compte de vente" in e for e in res.erreurs)
 
 
 def test_unknown_point_de_vente_blocks_export():
@@ -138,15 +158,20 @@ def test_convert_csv_variant_balances_and_preserves_ca():
     export = parse_lightspeed_export(_SAMPLE_CSV_3_TAUX, "export.csv")
     mappings = {
         **DEFAULT_MAPPINGS,
-        "comptes_ventes": [
-            {"categorie_lightspeed": "Alcool", "compte": "70110200", "libelle_compte": "VENTE LIQUIDE TVA 20%", "taux_tva": "20%"},
-            {"categorie_lightspeed": "Boisson à emporter", "compte": "70110055", "libelle_compte": "VENTE A EMPORTER TVA 5.5%", "taux_tva": "5.5%"},
-            {"categorie_lightspeed": "Boissons", "compte": "70110010", "libelle_compte": "VENTES SOLIDE TVA 10%", "taux_tva": "10%"},
+        "comptes_de_vente": [
+            {"compte": "70110200", "libelle_compte": "VENTE LIQUIDE TVA 20%"},
+            {"compte": "70110055", "libelle_compte": "VENTE A EMPORTER TVA 5.5%"},
+            {"compte": "70110010", "libelle_compte": "VENTES SOLIDE TVA 10%"},
+        ],
+        "departements": [
+            {"categorie_lightspeed": "Alcool", "compte": "70110200", "taux_tva": "20%"},
+            {"categorie_lightspeed": "Boisson à emporter", "compte": "70110055", "taux_tva": "5.5%"},
+            {"categorie_lightspeed": "Boissons", "compte": "70110010", "taux_tva": "10%"},
         ],
         "comptes_analytiques": [
-            {"compte": "70110200", "point_de_vente": "REST", "code_analytique": "REST"},
-            {"compte": "70110055", "point_de_vente": "REST", "code_analytique": "REST"},
-            {"compte": "70110010", "point_de_vente": "REST", "code_analytique": "REST"},
+            {"compte": "70110200", "point_de_vente": "REST", "categorie_lightspeed": "Alcool", "code_analytique": "REST"},
+            {"compte": "70110055", "point_de_vente": "REST", "categorie_lightspeed": "Boisson à emporter", "code_analytique": "REST"},
+            {"compte": "70110010", "point_de_vente": "REST", "categorie_lightspeed": "Boissons", "code_analytique": "REST"},
         ],
     }
     res = convert(export, mappings, point_de_vente="REST", date_piece="01/06/26", numero_piece="LS-TEST-CSV")

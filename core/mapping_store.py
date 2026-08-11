@@ -4,9 +4,23 @@ par client dans data/clients/<client_id>/mappings.json. Toute la logique de
 "comptabilité" (comptes, codes analytiques, comptes de contrepartie...) est
 éditable depuis l'app, rien n'est codé en dur dans le convertisseur.
 
-Quatre tables :
-- comptes_ventes       : Catégorie LightSpeed -> Compte de vente Pennylane (+ taux TVA nominal)
-- comptes_analytiques  : (Compte comptable, Point de vente) -> Famille + Code analytique
+Tables :
+- comptes_de_vente     : référentiel pur des comptes de vente Pennylane
+                         (code + libellé), sans lien avec LightSpeed - sert
+                         uniquement à proposer une liste de choix fiable
+                         (menu déroulant) plutôt que de la saisie libre.
+- departements         : Département LightSpeed (LightSpeed n'a pas de
+                         notion de "catégorie" indépendante : la référence
+                         comptable EST le département) -> Compte de vente
+                         (choisi dans comptes_de_vente) + taux de TVA nominal
+                         (informatif : le taux réellement appliqué à chaque
+                         ligne vient du fichier LightSpeed lui-même, pas
+                         d'ici).
+- comptes_analytiques  : (Compte comptable, Point de vente, Département)
+                         -> Famille + Code analytique. Les trois critères
+                         sont nécessaires : LightSpeed ne fournissant aucune
+                         notion d'analytique, c'est cette combinaison qui la
+                         reconstitue entièrement.
 - comptes_paiement     : Mode de paiement LightSpeed -> Compte de contrepartie (banque/caisse)
 - comptes_tva          : Taux de TVA -> Compte de TVA collectée
 - points_de_vente      : liste des points de vente connus (code + libellé + adresse mail
@@ -32,7 +46,8 @@ EMPTY_MAPPINGS = {
         "tolerance_equilibrage": 0.02,
     },
     "points_de_vente": [],
-    "comptes_ventes": [],
+    "comptes_de_vente": [],
+    "departements": [],
     "comptes_analytiques": [],
     "comptes_paiement": [],
     "comptes_tva": [],
@@ -52,19 +67,26 @@ DEFAULT_MAPPINGS = {
         {"code": "ADD", "libelle": "VENTES ADDITIONNELLES"},
         {"code": "PARIS", "libelle": "PARIS 2.0"},
     ],
-    "comptes_ventes": [
-        {"categorie_lightspeed": "Cuisine - Entrée", "compte": "70110010", "libelle_compte": "VENTES SOLIDE TVA 10%", "taux_tva": "10%"},
-        {"categorie_lightspeed": "Cuisine - Plat", "compte": "70110010", "libelle_compte": "VENTES SOLIDE TVA 10%", "taux_tva": "10%"},
-        {"categorie_lightspeed": "Cuisine - Dessert", "compte": "70110010", "libelle_compte": "VENTES SOLIDE TVA 10%", "taux_tva": "10%"},
-        {"categorie_lightspeed": "Softs", "compte": "70110010", "libelle_compte": "VENTES SOLIDE TVA 10%", "taux_tva": "10%"},
-        {"categorie_lightspeed": "Alcool (200)", "compte": "70110200", "libelle_compte": "VENTE LIQUIDE TVA 20%", "taux_tva": "20%"},
-        {"categorie_lightspeed": "Vin et Champagne", "compte": "70110200", "libelle_compte": "VENTE LIQUIDE TVA 20%", "taux_tva": "20%"},
+    "comptes_de_vente": [
+        {"compte": "70110010", "libelle_compte": "VENTES SOLIDE TVA 10%"},
+        {"compte": "70110200", "libelle_compte": "VENTE LIQUIDE TVA 20%"},
+    ],
+    "departements": [
+        {"categorie_lightspeed": "Cuisine - Entrée", "compte": "70110010", "taux_tva": "10%"},
+        {"categorie_lightspeed": "Cuisine - Plat", "compte": "70110010", "taux_tva": "10%"},
+        {"categorie_lightspeed": "Cuisine - Dessert", "compte": "70110010", "taux_tva": "10%"},
+        {"categorie_lightspeed": "Softs", "compte": "70110010", "taux_tva": "10%"},
+        {"categorie_lightspeed": "Alcool (200)", "compte": "70110200", "taux_tva": "20%"},
+        {"categorie_lightspeed": "Vin et Champagne", "compte": "70110200", "taux_tva": "20%"},
     ],
     "comptes_analytiques": [
-        {"compte": "70110010", "point_de_vente": "REST", "famille": "POINT_DE_VENTE", "code_analytique": "REST"},
-        {"compte": "70110200", "point_de_vente": "REST", "famille": "POINT_DE_VENTE", "code_analytique": "REST"},
-        {"compte": "70110010", "point_de_vente": "BARF", "famille": "POINT_DE_VENTE", "code_analytique": "BARF"},
-        {"compte": "70110200", "point_de_vente": "BARF", "famille": "POINT_DE_VENTE", "code_analytique": "BARF"},
+        {"compte": "70110010", "point_de_vente": pdv, "categorie_lightspeed": dep, "famille": "POINT_DE_VENTE", "code_analytique": pdv}
+        for pdv in ("REST", "BARF")
+        for dep in ("Cuisine - Entrée", "Cuisine - Plat", "Cuisine - Dessert", "Softs")
+    ] + [
+        {"compte": "70110200", "point_de_vente": pdv, "categorie_lightspeed": dep, "famille": "POINT_DE_VENTE", "code_analytique": pdv}
+        for pdv in ("REST", "BARF")
+        for dep in ("Alcool (200)", "Vin et Champagne")
     ],
     "comptes_paiement": [
         {"mode_paiement": "Carte bleue", "compte": "511100", "libelle_compte": "Remises de cartes bancaires"},
@@ -134,23 +156,87 @@ def ensure_points_de_vente(client_id: str, points: list[dict]) -> None:
         save_mappings(client_id, mappings)
 
 
+def ensure_comptes_de_vente(client_id: str, comptes: list[dict]) -> None:
+    """Comme ensure_points_de_vente : ajoute les comptes listés s'ils sont
+    absents (par code compte), sans jamais toucher à l'existant."""
+    mappings = load_mappings(client_id)
+    existants = {c.get("compte") for c in mappings.get("comptes_de_vente", [])}
+    manquants = [c for c in comptes if c["compte"] not in existants]
+    if manquants:
+        mappings.setdefault("comptes_de_vente", []).extend(manquants)
+        save_mappings(client_id, mappings)
+
+
+def ensure_departements(client_id: str, departements: list[dict]) -> None:
+    """Ajoute les départements listés s'ils sont absents (par nom de
+    département), sans écraser un compte déjà renseigné manuellement."""
+    mappings = load_mappings(client_id)
+    existants = {_norm_key(d.get("categorie_lightspeed", "")) for d in mappings.get("departements", [])}
+    manquants = [d for d in departements if _norm_key(d["categorie_lightspeed"]) not in existants]
+    if manquants:
+        mappings.setdefault("departements", []).extend(manquants)
+        save_mappings(client_id, mappings)
+
+
+def ensure_comptes_paiement(client_id: str, paiements: list[dict]) -> None:
+    mappings = load_mappings(client_id)
+    existants = {_norm_key(p.get("mode_paiement", "")) for p in mappings.get("comptes_paiement", [])}
+    manquants = [p for p in paiements if _norm_key(p["mode_paiement"]) not in existants]
+    if manquants:
+        mappings.setdefault("comptes_paiement", []).extend(manquants)
+        save_mappings(client_id, mappings)
+
+
+def ensure_comptes_tva(client_id: str, taux_rows: list[dict]) -> None:
+    mappings = load_mappings(client_id)
+    existants = {t.get("taux") for t in mappings.get("comptes_tva", [])}
+    manquants = [t for t in taux_rows if t["taux"] not in existants]
+    if manquants:
+        mappings.setdefault("comptes_tva", []).extend(manquants)
+        save_mappings(client_id, mappings)
+
+
 # --- Helpers de recherche (tolérants à la casse/espaces) -------------------
 
 def _norm_key(s: str) -> str:
     return (s or "").strip().casefold()
 
 
-def find_compte_vente(mappings: dict, categorie_lightspeed: str) -> dict | None:
+def find_departement(mappings: dict, categorie_lightspeed: str) -> dict | None:
+    """Retrouve le mapping du département LightSpeed (= la valeur de la
+    colonne « Références comptables » du fichier source) vers son compte de
+    vente. Le compte, lui, doit être choisi parmi ceux du référentiel
+    « Comptes de vente » (cf. find_compte_reference)."""
     target = _norm_key(categorie_lightspeed)
-    for row in mappings.get("comptes_ventes", []):
+    for row in mappings.get("departements", []):
         if _norm_key(row.get("categorie_lightspeed", "")) == target:
             return row
     return None
 
 
-def find_code_analytique(mappings: dict, compte: str, point_de_vente: str) -> dict | None:
+def find_compte_reference(mappings: dict, compte: str) -> dict | None:
+    """Retrouve un compte dans le référentiel pur « Comptes de vente »
+    (utilisé pour son libellé, et comme source de vérité des comptes valides
+    proposés en liste déroulante dans les autres tables)."""
+    for row in mappings.get("comptes_de_vente", []):
+        if row.get("compte") == compte:
+            return row
+    return None
+
+
+def find_code_analytique(mappings: dict, compte: str, point_de_vente: str, categorie_lightspeed: str) -> dict | None:
+    """LightSpeed ne fournit aucune notion d'analytique : c'est la
+    combinaison (compte, point de vente, département) qui la reconstitue -
+    les trois critères sont nécessaires, un même compte pouvant porter un
+    code analytique différent selon le point de vente ET selon le département
+    (ex. un compte de boisson peut être « Sommellerie » ou « Bar » selon le
+    département d'origine, même sur un seul et même point de vente)."""
     for row in mappings.get("comptes_analytiques", []):
-        if row.get("compte") == compte and _norm_key(row.get("point_de_vente", "")) == _norm_key(point_de_vente):
+        if (
+            row.get("compte") == compte
+            and _norm_key(row.get("point_de_vente", "")) == _norm_key(point_de_vente)
+            and _norm_key(row.get("categorie_lightspeed", "")) == _norm_key(categorie_lightspeed)
+        ):
             return row
     return None
 

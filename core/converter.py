@@ -11,8 +11,9 @@ from core.lightspeed_parser import LightspeedExport
 from core.mapping_store import (
     find_code_analytique,
     find_compte_paiement,
+    find_compte_reference,
     find_compte_tva,
-    find_compte_vente,
+    find_departement,
 )
 
 # Ordre et libellés EXACTS des colonnes du modèle d'import avancé Pennylane.
@@ -93,13 +94,25 @@ def convert(
     tva_dues: dict[str, float] = {}
 
     for cat in export.categories:
-        compte_vente = find_compte_vente(mappings, cat.libelle)
-        if compte_vente is None:
+        departement = find_departement(mappings, cat.libelle)
+        if departement is None:
             res.avertissements.append(
-                f"Catégorie « {cat.libelle} » non mappée dans « Comptes de vente » "
+                f"Catégorie « {cat.libelle} » non mappée dans « Départements LightSpeed » "
                 f"→ ligne ignorée ({cat.total_ht:.2f} € HT non converti)."
             )
             continue
+
+        compte = departement.get("compte")
+        if not compte:
+            # Le département est connu mais son compte de vente n'a pas encore été
+            # choisi (ex. paramétrage en cours) : bloquant, comme un mapping absent -
+            # jamais de ligne générée sur un compte vide.
+            res.erreurs.append(
+                f"Département « {cat.libelle} » sans compte de vente renseigné "
+                f"dans « Départements LightSpeed » ({cat.total_ht:.2f} € HT concerné)."
+            )
+            continue
+        libelle_compte = (find_compte_reference(mappings, compte) or {}).get("libelle_compte", "")
 
         if cat.taux_ambigu:
             res.avertissements.append(
@@ -107,15 +120,15 @@ def convert(
                 f"du fichier source — taux retenu {cat.taux_tva}, à vérifier manuellement."
             )
 
-        code_analytique = find_code_analytique(mappings, compte_vente["compte"], point_de_vente)
+        code_analytique = find_code_analytique(mappings, compte, point_de_vente, cat.libelle)
         if code_analytique is None:
             # Le code analytique est la raison d'être de l'outil : une combinaison
-            # (compte, point de vente) non paramétrée est traitée comme une erreur
-            # bloquante, au même titre qu'une catégorie non mappée, et non comme un
-            # simple avertissement.
+            # (compte, point de vente, département) non paramétrée est traitée comme
+            # une erreur bloquante, au même titre qu'un mapping absent, et non comme
+            # un simple avertissement.
             res.erreurs.append(
-                f"Aucun code analytique paramétré pour le compte {compte_vente['compte']} "
-                f"/ point de vente « {point_de_vente} » — complétez la table « Codes analytiques »."
+                f"Aucun code analytique paramétré pour le compte {compte} / point de vente "
+                f"« {point_de_vente} » / département « {cat.libelle} » — complétez la table « Codes analytiques »."
             )
             famille_ligne, code_ligne = "", ""
         else:
@@ -126,8 +139,8 @@ def convert(
             {
                 "Date": date_piece,
                 "Code Journal": code_journal,
-                "Numéro de compte": compte_vente["compte"],
-                "Libellé de compte": compte_vente.get("libelle_compte", ""),
+                "Numéro de compte": compte,
+                "Libellé de compte": libelle_compte,
                 "Libellé de ligne": cat.libelle,
                 "Taux de TVA du compte": cat.taux_tva or "",
                 "Code pays du compte": code_pays,
