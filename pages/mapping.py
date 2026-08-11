@@ -27,6 +27,43 @@ def _as_editable_df(rows: list[dict], columns: list[str]) -> pd.DataFrame:
         return pd.DataFrame(columns=columns)
     return pd.DataFrame(rows).reindex(columns=columns).fillna("").astype(str)
 
+
+def _options_avec_libelle(rows: list[dict], code_key: str, libelle_key: str) -> list[str]:
+    """Options de menu déroulant "code - libellé" : lisible sans connaître les
+    codes par cœur. Seul le code (avant le premier " - ") est réellement
+    stocké au moment de l'enregistrement — cf. _code_depuis_affichage — le
+    libellé n'est qu'un confort de lecture, jamais une donnée persistée."""
+    out = []
+    for r in rows:
+        code = (r.get(code_key) or "").strip()
+        if not code:
+            continue
+        libelle = (r.get(libelle_key) or "").strip()
+        out.append(f"{code} - {libelle}" if libelle else code)
+    return out
+
+
+def _affichage_depuis_code(code: str, rows: list[dict], code_key: str, libelle_key: str) -> str:
+    """Convertit un code déjà enregistré vers sa forme d'affichage "code -
+    libellé" si son libellé est retrouvé dans le référentiel fourni, sinon
+    renvoie le code tel quel — une valeur déjà enregistrée n'est jamais
+    perdue/vidée, même si elle ne correspond plus à rien dans le référentiel."""
+    code = (code or "").strip()
+    if not code:
+        return code
+    for r in rows:
+        if (r.get(code_key) or "").strip() == code:
+            libelle = (r.get(libelle_key) or "").strip()
+            return f"{code} - {libelle}" if libelle else code
+    return code
+
+
+def _code_depuis_affichage(valeur: str) -> str:
+    """Ne garde que la partie code d'une valeur affichée "code - libellé" :
+    tout ce qui suit le premier " - " n'est qu'esthétique, jamais stocké."""
+    return (valeur or "").split(" - ", 1)[0].strip()
+
+
 client_id = select_client()
 
 st.title("🗂️ Table de correspondance")
@@ -42,12 +79,13 @@ if client_id is None:
 
 mappings = load_mappings(client_id)
 
-tab_pdv, tab_comptes, tab_departements, tab_analytique, tab_paiement, tab_tva = st.tabs(
+tab_pdv, tab_comptes, tab_departements, tab_codes_analytiques, tab_attribution, tab_paiement, tab_tva = st.tabs(
     [
         "Points de vente",
         "Comptes de vente",
         "Départements LightSpeed",
         "Codes analytiques",
+        "Attribution analytique",
         "Contreparties de paiement",
         "TVA collectée",
     ]
@@ -80,9 +118,10 @@ with tab_pdv:
 with tab_comptes:
     st.markdown(
         "**Référentiel des comptes de vente Pennylane** (plan comptable), indépendant de LightSpeed. "
-        "Sert uniquement à proposer une liste de comptes valides (menu déroulant) dans les tables "
-        "« Départements LightSpeed » et « Codes analytiques », pour éviter les erreurs de saisie — "
-        "c'est *là-bas* que se fait le lien avec les catégories LightSpeed, pas ici."
+        "Sert uniquement à proposer une liste de comptes valides (menu déroulant, affiché « code - "
+        "libellé » pour rester lisible) dans les tables « Départements LightSpeed » et "
+        "« Attribution analytique » — c'est *là-bas* que se fait le lien avec les catégories "
+        "LightSpeed, pas ici."
     )
     edited_comptes_df = st.data_editor(
         _as_editable_df(mappings.get("comptes_de_vente", []), ["compte", "libelle_compte", "commentaires"]),
@@ -96,7 +135,7 @@ with tab_comptes:
         },
     )
     edited_comptes = edited_comptes_df.dropna(how="all").fillna("").to_dict("records")
-    comptes_options = [c["compte"] for c in edited_comptes if c.get("compte")]
+    comptes_options = _options_avec_libelle(edited_comptes, "compte", "libelle_compte")
 
 with tab_departements:
     st.markdown(
@@ -110,11 +149,12 @@ with tab_departements:
     )
     if not comptes_options:
         st.warning("Ajoutez d'abord des comptes dans l'onglet « Comptes de vente » pour pouvoir les choisir ici.")
+    departements_source = [
+        {**d, "compte": _affichage_depuis_code(d.get("compte", ""), edited_comptes, "compte", "libelle_compte")}
+        for d in mappings.get("departements", [])
+    ]
     edited_departements_df = st.data_editor(
-        _as_editable_df(
-            mappings.get("departements", []),
-            ["categorie_lightspeed", "compte", "taux_tva", "commentaires"],
-        ),
+        _as_editable_df(departements_source, ["categorie_lightspeed", "compte", "taux_tva", "commentaires"]),
         num_rows="dynamic",
         use_container_width=True,
         key="editor_departements",
@@ -127,27 +167,67 @@ with tab_departements:
             "commentaires": st.column_config.TextColumn("Commentaires"),
         },
     )
-    edited_departements = edited_departements_df.dropna(how="all").fillna("").to_dict("records")
+    edited_departements = [
+        {**d, "compte": _code_depuis_affichage(d.get("compte", ""))}
+        for d in edited_departements_df.dropna(how="all").fillna("").to_dict("records")
+    ]
 
-with tab_analytique:
+with tab_codes_analytiques:
+    st.markdown(
+        "**Référentiel pur des codes analytiques** existants côté Pennylane (code + description), "
+        "indépendant de LightSpeed — la simple liste des codes valides. Sert de liste de choix dans "
+        "l'onglet « Attribution analytique », qui décide *quand* utiliser quel code ; ce n'est pas le "
+        "cas ici."
+    )
+    edited_codes_analytiques_df = st.data_editor(
+        _as_editable_df(mappings.get("codes_analytiques", []), ["code_analytique", "description", "commentaires"]),
+        num_rows="dynamic",
+        use_container_width=True,
+        key="editor_codes_analytiques",
+        column_config={
+            "code_analytique": st.column_config.TextColumn("Code analytique", required=True),
+            "description": st.column_config.TextColumn("Description", required=True),
+            "commentaires": st.column_config.TextColumn("Commentaires"),
+        },
+    )
+    edited_codes_analytiques = edited_codes_analytiques_df.dropna(how="all").fillna("").to_dict("records")
+    codes_analytiques_options = _options_avec_libelle(edited_codes_analytiques, "code_analytique", "description")
+
+with tab_attribution:
     st.markdown(
         "Pour un **compte comptable**, un **point de vente** et un **département LightSpeed** donnés, "
-        "la **famille analytique** et le **code analytique** à générer. C'est cette table qui « rejoue » "
-        "l'analytique que LightSpeed ne fournit pas — les trois critères sont nécessaires : un même "
-        "compte peut porter un code analytique différent selon le département, même sur un seul et "
-        "même point de vente (ex. un compte de boisson peut être « Sommellerie » ou « Bar » selon le "
-        "département d'origine). Toute combinaison rencontrée à la conversion et absente d'ici bloquera "
-        "l'export."
+        "quel **code analytique** (choisi dans l'onglet précédent) appliquer. C'est cette table qui "
+        "« rejoue » l'analytique que LightSpeed ne fournit pas — les trois critères sont nécessaires : "
+        "un même compte peut porter un code analytique différent selon le département, même sur un "
+        "seul et même point de vente (ex. un compte de boisson peut être « Sommellerie » ou « Bar » "
+        "selon le département d'origine). Toute combinaison rencontrée à la conversion et absente "
+        "d'ici bloquera l'export.\n\n"
+        "⚠️ Cette table part de l'hypothèse que la combinaison (compte, point de vente, département) "
+        "suffit à déterminer le code analytique dans tous les cas — à valider avec un exemple réel : "
+        "si certains cas s'avèrent plus dynamiques (règle non réductible à cette combinaison), cette "
+        "table ne sera pas suffisante et il faudra revoir l'approche."
     )
     departements_options = [d["categorie_lightspeed"] for d in edited_departements if d.get("categorie_lightspeed")]
-    edited_analytique_df = st.data_editor(
+    if not codes_analytiques_options:
+        st.warning("Ajoutez d'abord des codes dans l'onglet « Codes analytiques » pour pouvoir les choisir ici.")
+    attribution_source = [
+        {
+            **a,
+            "compte": _affichage_depuis_code(a.get("compte", ""), edited_comptes, "compte", "libelle_compte"),
+            "code_analytique": _affichage_depuis_code(
+                a.get("code_analytique", ""), edited_codes_analytiques, "code_analytique", "description"
+            ),
+        }
+        for a in mappings.get("comptes_analytiques", [])
+    ]
+    edited_attribution_df = st.data_editor(
         _as_editable_df(
-            mappings.get("comptes_analytiques", []),
+            attribution_source,
             ["compte", "point_de_vente", "categorie_lightspeed", "famille", "code_analytique", "commentaires"],
         ),
         num_rows="dynamic",
         use_container_width=True,
-        key="editor_analytique",
+        key="editor_attribution",
         column_config={
             "compte": st.column_config.SelectboxColumn("Compte comptable", options=comptes_options, required=True),
             "point_de_vente": st.column_config.SelectboxColumn(
@@ -159,11 +239,20 @@ with tab_analytique:
                 "Département LightSpeed", options=departements_options, required=True
             ),
             "famille": st.column_config.TextColumn("Famille analytique", required=True),
-            "code_analytique": st.column_config.TextColumn("Code analytique généré", required=True),
+            "code_analytique": st.column_config.SelectboxColumn(
+                "Code analytique", options=codes_analytiques_options, required=True
+            ),
             "commentaires": st.column_config.TextColumn("Commentaires"),
         },
     )
-    edited_analytique = edited_analytique_df.dropna(how="all").fillna("").to_dict("records")
+    edited_attribution = [
+        {
+            **a,
+            "compte": _code_depuis_affichage(a.get("compte", "")),
+            "code_analytique": _code_depuis_affichage(a.get("code_analytique", "")),
+        }
+        for a in edited_attribution_df.dropna(how="all").fillna("").to_dict("records")
+    ]
 
 with tab_paiement:
     st.markdown(
@@ -214,7 +303,8 @@ if b1.button("💾 Enregistrer les tables de correspondance", type="primary"):
             "points_de_vente": edited_pdv,
             "comptes_de_vente": edited_comptes,
             "departements": edited_departements,
-            "comptes_analytiques": edited_analytique,
+            "codes_analytiques": edited_codes_analytiques,
+            "comptes_analytiques": edited_attribution,
             "comptes_paiement": edited_paiement,
             "comptes_tva": edited_tva,
         },

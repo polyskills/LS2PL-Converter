@@ -15,6 +15,7 @@ import pytest
 
 from core.bootstrap import (
     DEFAULT_CLIENTS,
+    DEFAULT_CODES_ANALYTIQUES,
     DEFAULT_COMPTES_DE_VENTE,
     DEFAULT_COMPTES_PAIEMENT,
     DEFAULT_COMPTES_TVA,
@@ -53,6 +54,9 @@ def test_ensure_defaults_seeds_paris_referentiel():
     departements = {d["categorie_lightspeed"] for d in mappings["departements"]}
     assert departements == {d["categorie_lightspeed"] for d in DEFAULT_DEPARTEMENTS["paris"]}
 
+    codes_analytiques = {c["code_analytique"] for c in mappings["codes_analytiques"]}
+    assert codes_analytiques == {c["code_analytique"] for c in DEFAULT_CODES_ANALYTIQUES["paris"]}
+
     modes_paiement = {p["mode_paiement"] for p in mappings["comptes_paiement"]}
     assert modes_paiement == {p["mode_paiement"] for p in DEFAULT_COMPTES_PAIEMENT["paris"]}
 
@@ -63,6 +67,7 @@ def test_ensure_defaults_seeds_paris_referentiel():
     mappings_valence = load_mappings("valence")
     assert mappings_valence["comptes_de_vente"] == []
     assert mappings_valence["departements"] == []
+    assert mappings_valence["codes_analytiques"] == []
 
 
 def test_ensure_defaults_is_idempotent_and_preserves_customizations():

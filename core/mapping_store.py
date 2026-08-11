@@ -16,11 +16,19 @@ Tables :
                          (informatif : le taux réellement appliqué à chaque
                          ligne vient du fichier LightSpeed lui-même, pas
                          d'ici).
+- codes_analytiques    : référentiel pur des codes analytiques Pennylane
+                         (code + description), sans lien avec compte/pdv/
+                         département - sert de liste de choix à la table
+                         suivante, symétrique de comptes_de_vente.
 - comptes_analytiques  : (Compte comptable, Point de vente, Département)
-                         -> Famille + Code analytique. Les trois critères
-                         sont nécessaires : LightSpeed ne fournissant aucune
+                         -> Famille + Code analytique (choisi dans
+                         codes_analytiques). Les trois critères sont
+                         nécessaires : LightSpeed ne fournissant aucune
                          notion d'analytique, c'est cette combinaison qui la
-                         reconstitue entièrement.
+                         reconstitue entièrement. Hypothèse à confirmer avec
+                         un cas réel : si un cas s'avère non réductible à
+                         cette combinaison figée, une résolution dynamique
+                         sera nécessaire à la place.
 - comptes_paiement     : Mode de paiement LightSpeed -> Compte de contrepartie (banque/caisse)
 - comptes_tva          : Taux de TVA -> Compte de TVA collectée
 - points_de_vente      : liste des points de vente connus (code + libellé + adresse mail
@@ -48,6 +56,7 @@ EMPTY_MAPPINGS = {
     "points_de_vente": [],
     "comptes_de_vente": [],
     "departements": [],
+    "codes_analytiques": [],
     "comptes_analytiques": [],
     "comptes_paiement": [],
     "comptes_tva": [],
@@ -78,6 +87,10 @@ DEFAULT_MAPPINGS = {
         {"categorie_lightspeed": "Softs", "compte": "70110010", "taux_tva": "10%"},
         {"categorie_lightspeed": "Alcool (200)", "compte": "70110200", "taux_tva": "20%"},
         {"categorie_lightspeed": "Vin et Champagne", "compte": "70110200", "taux_tva": "20%"},
+    ],
+    "codes_analytiques": [
+        {"code_analytique": "REST", "description": "RESTAURANT"},
+        {"code_analytique": "BARF", "description": "BAR FOOD"},
     ],
     "comptes_analytiques": [
         {"compte": "70110010", "point_de_vente": pdv, "categorie_lightspeed": dep, "famille": "POINT_DE_VENTE", "code_analytique": pdv}
@@ -175,6 +188,17 @@ def ensure_departements(client_id: str, departements: list[dict]) -> None:
     manquants = [d for d in departements if _norm_key(d["categorie_lightspeed"]) not in existants]
     if manquants:
         mappings.setdefault("departements", []).extend(manquants)
+        save_mappings(client_id, mappings)
+
+
+def ensure_codes_analytiques(client_id: str, codes: list[dict]) -> None:
+    """Ajoute les codes analytiques listés s'ils sont absents (par code),
+    sans écraser une description déjà personnalisée."""
+    mappings = load_mappings(client_id)
+    existants = {c.get("code_analytique") for c in mappings.get("codes_analytiques", [])}
+    manquants = [c for c in codes if c["code_analytique"] not in existants]
+    if manquants:
+        mappings.setdefault("codes_analytiques", []).extend(manquants)
         save_mappings(client_id, mappings)
 
 

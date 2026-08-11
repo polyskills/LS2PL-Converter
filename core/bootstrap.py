@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from core.client_store import ensure_client
 from core.mapping_store import (
+    ensure_codes_analytiques,
     ensure_comptes_de_vente,
     ensure_comptes_paiement,
     ensure_comptes_tva,
@@ -102,6 +103,21 @@ DEFAULT_DEPARTEMENTS = {
     ],
 }
 
+# Référentiel des codes analytiques transmis par le client (section "CODES
+# ANALYTIQUE" du message d'origine) : la simple liste des codes valides, pas
+# encore leur règle d'attribution (compte x pdv x département), qui reste à
+# renseigner séparément une fois les comptes de vente choisis.
+DEFAULT_CODES_ANALYTIQUES = {
+    "paris": [
+        {"code_analytique": "REST", "description": "RESTAURANT"},
+        {"code_analytique": "SOM", "description": "SOMMELLERIE"},
+        {"code_analytique": "BARF", "description": "BAR FOOD"},
+        {"code_analytique": "BARS", "description": "BAR SOMMELLERIE"},
+        {"code_analytique": "ADD", "description": "VENTES ADDITIONNELLES"},
+        {"code_analytique": "PARIS", "description": "PARIS 2.0"},
+    ],
+}
+
 DEFAULT_COMPTES_PAIEMENT = {
     "paris": [
         {"mode_paiement": "VISA / MASTERCARD", "compte": ""},
@@ -128,5 +144,6 @@ def ensure_defaults() -> None:
             set_pdv_adresse_email(c["id"], code_pdv, adresse)
         ensure_comptes_de_vente(c["id"], DEFAULT_COMPTES_DE_VENTE.get(c["id"], []))
         ensure_departements(c["id"], DEFAULT_DEPARTEMENTS.get(c["id"], []))
+        ensure_codes_analytiques(c["id"], DEFAULT_CODES_ANALYTIQUES.get(c["id"], []))
         ensure_comptes_paiement(c["id"], DEFAULT_COMPTES_PAIEMENT.get(c["id"], []))
         ensure_comptes_tva(c["id"], DEFAULT_COMPTES_TVA.get(c["id"], []))
