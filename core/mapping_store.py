@@ -69,11 +69,6 @@ EMPTY_MAPPINGS = {
     "comptes_paiement": [],
     "modes_paiement_ignores": [],
     "comptes_tva": [],
-    # Indicateur interne (jamais affiché/édité) : marque qu'un client a déjà
-    # reçu son référentiel de départ une fois - cf. core.bootstrap. Empêche
-    # de réappliquer le seed à chaque interaction et de ressusciter des lignes
-    # que l'utilisateur a délibérément supprimées.
-    "_referentiel_initial_applique": False,
 }
 
 # Jeu d'exemple proposé à la création d'un client (repris de la logique du
@@ -168,70 +163,6 @@ def seed_with_examples(client_id: str) -> dict:
 def reset_to_empty(client_id: str) -> dict:
     save_mappings(client_id, copy.deepcopy(EMPTY_MAPPINGS))
     return copy.deepcopy(EMPTY_MAPPINGS)
-
-
-def ensure_points_de_vente(client_id: str, points: list[dict]) -> None:
-    """Ajoute les points de vente listés s'ils sont absents, sans toucher au
-    reste du référentiel ni aux points de vente déjà présents (jamais de
-    suppression/écrasement) — pour re-garantir des points de vente par défaut
-    à chaque démarrage sans perdre les personnalisations faites entre-temps."""
-    mappings = load_mappings(client_id)
-    existants = {p.get("code") for p in mappings.get("points_de_vente", [])}
-    manquants = [p for p in points if p["code"] not in existants]
-    if manquants:
-        mappings.setdefault("points_de_vente", []).extend(manquants)
-        save_mappings(client_id, mappings)
-
-
-def ensure_comptes_de_vente(client_id: str, comptes: list[dict]) -> None:
-    """Comme ensure_points_de_vente : ajoute les comptes listés s'ils sont
-    absents (par code compte), sans jamais toucher à l'existant."""
-    mappings = load_mappings(client_id)
-    existants = {c.get("compte") for c in mappings.get("comptes_de_vente", [])}
-    manquants = [c for c in comptes if c["compte"] not in existants]
-    if manquants:
-        mappings.setdefault("comptes_de_vente", []).extend(manquants)
-        save_mappings(client_id, mappings)
-
-
-def ensure_departements(client_id: str, departements: list[dict]) -> None:
-    """Ajoute les départements listés s'ils sont absents (par nom de
-    département), sans écraser un compte déjà renseigné manuellement."""
-    mappings = load_mappings(client_id)
-    existants = {_norm_key(d.get("categorie_lightspeed", "")) for d in mappings.get("departements", [])}
-    manquants = [d for d in departements if _norm_key(d["categorie_lightspeed"]) not in existants]
-    if manquants:
-        mappings.setdefault("departements", []).extend(manquants)
-        save_mappings(client_id, mappings)
-
-
-def ensure_codes_analytiques(client_id: str, codes: list[dict]) -> None:
-    """Ajoute les codes analytiques listés s'ils sont absents (par code),
-    sans écraser une description déjà personnalisée."""
-    mappings = load_mappings(client_id)
-    existants = {c.get("code_analytique") for c in mappings.get("codes_analytiques", [])}
-    manquants = [c for c in codes if c["code_analytique"] not in existants]
-    if manquants:
-        mappings.setdefault("codes_analytiques", []).extend(manquants)
-        save_mappings(client_id, mappings)
-
-
-def ensure_comptes_paiement(client_id: str, paiements: list[dict]) -> None:
-    mappings = load_mappings(client_id)
-    existants = {_norm_key(p.get("mode_paiement", "")) for p in mappings.get("comptes_paiement", [])}
-    manquants = [p for p in paiements if _norm_key(p["mode_paiement"]) not in existants]
-    if manquants:
-        mappings.setdefault("comptes_paiement", []).extend(manquants)
-        save_mappings(client_id, mappings)
-
-
-def ensure_comptes_tva(client_id: str, taux_rows: list[dict]) -> None:
-    mappings = load_mappings(client_id)
-    existants = {t.get("taux") for t in mappings.get("comptes_tva", [])}
-    manquants = [t for t in taux_rows if t["taux"] not in existants]
-    if manquants:
-        mappings.setdefault("comptes_tva", []).extend(manquants)
-        save_mappings(client_id, mappings)
 
 
 # --- Helpers de recherche (tolérants à la casse/espaces) -------------------

@@ -174,7 +174,6 @@ with cs2:
                     "avec le contenu de cette sauvegarde. Cette action est irréversible."
                 )
                 if st.button("✅ Confirmer la restauration", type="primary"):
-                    mappings_a_restaurer["_referentiel_initial_applique"] = True
                     save_mappings(client_id, mappings_a_restaurer)
                     st.success("Référentiel restauré avec succès.")
                     st.rerun()
