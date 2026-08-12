@@ -13,8 +13,30 @@ import streamlit as st
 
 st.set_page_config(page_title="LightSpeed → Pennylane", page_icon="🧾", layout="wide")
 
-with st.sidebar:
-    st.image("assets/logo.png", use_container_width=True)
+st.logo("assets/logo.png", size="large")
+
+# st.logo() plafonne la hauteur de l'image (32px max, quel que soit `size`) : bien
+# trop petit pour ce logo. C'est pourtant le seul mécanisme Streamlit qui place une
+# image AU-DESSUS du menu de navigation (celui-ci occupe toujours le haut de la
+# barre latérale, peu importe l'ordre des appels st.sidebar dans le script). On
+# garde donc st.logo() pour le placement, et on lève sa limite de taille par CSS.
+st.markdown(
+    """
+    <style>
+    div[data-testid="stSidebarHeader"] {
+        height: auto;
+        padding-bottom: 0.75rem;
+    }
+    img[data-testid="stSidebarLogo"] {
+        max-height: none;
+        height: auto;
+        width: 100%;
+        max-width: 100%;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 pages = {
     "Conversion": [
