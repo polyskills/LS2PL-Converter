@@ -39,6 +39,14 @@ PENNYLANE_COLUMNS = [
 ]
 
 
+def _code_pays_compte(compte: str, code_pays: str) -> str:
+    """Le code pays du compte ne doit être renseigné que pour les comptes de
+    charges (classe 6) et de produits (classe 7) - laissé vide pour tous les
+    autres (TVA, tiers, banque/caisse, compte d'écart...), quel que soit le
+    client (règle Pennylane, indépendante du référentiel paramétrable)."""
+    return code_pays if compte and compte[0] in ("6", "7") else ""
+
+
 @dataclass
 class ConversionResult:
     source_filename: str
@@ -143,7 +151,7 @@ def convert(
                 "Libellé de compte": libelle_compte,
                 "Libellé de ligne": cat.libelle,
                 "Taux de TVA du compte": cat.taux_tva or "",
-                "Code pays du compte": code_pays,
+                "Code pays du compte": _code_pays_compte(compte, code_pays),
                 "Libellé de pièce": libelle_piece,
                 "Numéro de pièce": numero_piece,
                 "Débit et/ou Crédit": 0,
@@ -178,7 +186,7 @@ def convert(
                 "Libellé de compte": compte_tva.get("libelle_compte", ""),
                 "Libellé de ligne": f"TVA collectée {taux}",
                 "Taux de TVA du compte": "",
-                "Code pays du compte": code_pays,
+                "Code pays du compte": _code_pays_compte(compte_tva["compte"], code_pays),
                 "Libellé de pièce": libelle_piece,
                 "Numéro de pièce": numero_piece,
                 "Débit et/ou Crédit": 0,
@@ -213,7 +221,7 @@ def convert(
                 "Libellé de compte": compte_p.get("libelle_compte", ""),
                 "Libellé de ligne": p.libelle,
                 "Taux de TVA du compte": "",
-                "Code pays du compte": code_pays,
+                "Code pays du compte": _code_pays_compte(compte_p["compte"], code_pays),
                 "Libellé de pièce": libelle_piece,
                 "Numéro de pièce": numero_piece,
                 "Débit et/ou Crédit": debit,
@@ -246,7 +254,7 @@ def convert(
                 "Libellé de compte": libelle_ecart,
                 "Libellé de ligne": "Report / régularisation encaissements LightSpeed",
                 "Taux de TVA du compte": "",
-                "Code pays du compte": code_pays,
+                "Code pays du compte": _code_pays_compte(compte_ecart, code_pays),
                 "Libellé de pièce": libelle_piece,
                 "Numéro de pièce": numero_piece,
                 "Débit et/ou Crédit": round(-ecart, 2) if ecart < 0 else 0,

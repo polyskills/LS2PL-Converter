@@ -78,6 +78,23 @@ def test_convert_balances_and_preserves_ca():
     assert all(l["Code analytique"] == "REST" for l in ventes)
 
 
+def test_code_pays_uniquement_sur_comptes_classe_6_ou_7():
+    """Le code pays du compte ne doit être renseigné que pour les comptes de
+    charges (6) ou de produits (7) - vide pour tous les autres (TVA, tiers,
+    banque/caisse, compte d'écart...)."""
+    export = parse_lightspeed_export(_build_sample_xlsx(), "test_export.xlsx")
+    res = convert(export, DEFAULT_MAPPINGS, point_de_vente="REST", date_piece="26/05/26", numero_piece="LS-TEST")
+    assert res.sans_erreur, res.erreurs
+
+    lignes_vente = [l for l in res.lignes if l["Numéro de compte"].startswith(("6", "7"))]
+    lignes_autres = [l for l in res.lignes if not l["Numéro de compte"].startswith(("6", "7"))]
+
+    assert lignes_vente  # au moins les comptes de vente (70110010/70110200) et la TVA le cas échéant
+    assert all(l["Code pays du compte"] == "FR" for l in lignes_vente)
+    assert lignes_autres  # au moins la TVA collectée (445xxx) et les paiements (511100/530000)
+    assert all(l["Code pays du compte"] == "" for l in lignes_autres)
+
+
 def test_missing_mapping_reports_error_and_ca_mismatch():
     export = parse_lightspeed_export(_build_sample_xlsx(), "test_export.xlsx")
     mappings = {**DEFAULT_MAPPINGS, "departements": []}
