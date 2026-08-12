@@ -7,7 +7,13 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from core.mapping_store import load_mappings, reset_to_empty, save_mappings, seed_with_examples
+from core.mapping_store import (
+    find_code_analytique,
+    load_mappings,
+    reset_to_empty,
+    save_mappings,
+    seed_with_examples,
+)
 from core.ui_common import select_client
 
 
@@ -160,7 +166,13 @@ with tab_comptes:
         },
     )
     edited_comptes = edited_comptes_df.dropna(how="all").fillna("").to_dict("records")
-    comptes_options = _options_avec_libelle(edited_comptes, "compte", "libelle_compte")
+    # Les menus déroulants des autres onglets (ci-dessous) se basent volontairement sur l'état
+    # ENREGISTRÉ (mappings, chargé une fois en haut de page) plutôt que sur edited_comptes (le
+    # retour live de cet éditeur) : sinon, toute frappe ici fait varier la configuration des
+    # colonnes des autres onglets à chaque rafraîchissement, ce qui leur fait perdre leur saisie
+    # en cours côté Streamlit. Un compte tout juste ajouté n'apparaît donc dans les autres onglets
+    # qu'après un premier clic sur « Enregistrer » — c'est le compromis retenu pour la stabilité.
+    comptes_options = _options_avec_libelle(mappings.get("comptes_de_vente", []), "compte", "libelle_compte")
 
 with tab_departements:
     st.markdown(
@@ -175,7 +187,12 @@ with tab_departements:
     if not comptes_options:
         st.warning("Ajoutez d'abord des comptes dans l'onglet « Comptes de vente » pour pouvoir les choisir ici.")
     departements_source = [
-        {**d, "compte": _affichage_depuis_code(d.get("compte", ""), edited_comptes, "compte", "libelle_compte")}
+        {
+            **d,
+            "compte": _affichage_depuis_code(
+                d.get("compte", ""), mappings.get("comptes_de_vente", []), "compte", "libelle_compte"
+            ),
+        }
         for d in mappings.get("departements", [])
     ]
     edited_departements_df = st.data_editor(
@@ -224,7 +241,10 @@ with tab_codes_analytiques:
         },
     )
     edited_codes_analytiques = edited_codes_analytiques_df.dropna(how="all").fillna("").to_dict("records")
-    codes_analytiques_options = _options_avec_libelle(edited_codes_analytiques, "code_analytique", "description")
+    # Même choix que pour comptes_options ci-dessus : basé sur l'état enregistré, pas le live.
+    codes_analytiques_options = _options_avec_libelle(
+        mappings.get("codes_analytiques", []), "code_analytique", "description"
+    )
 
 with tab_attribution:
     st.markdown(
@@ -240,15 +260,83 @@ with tab_attribution:
         "si certains cas s'avèrent plus dynamiques (règle non réductible à cette combinaison), cette "
         "table ne sera pas suffisante et il faudra revoir l'approche."
     )
-    departements_options = [d["categorie_lightspeed"] for d in edited_departements if d.get("categorie_lightspeed")]
+    # Même choix que pour comptes_options : basé sur l'état enregistré, pas le live des autres onglets.
+    departements_options = [
+        d["categorie_lightspeed"] for d in mappings.get("departements", []) if d.get("categorie_lightspeed")
+    ]
+    pdv_options = [p["code"] for p in mappings.get("points_de_vente", [])]
     if not codes_analytiques_options:
         st.warning("Ajoutez d'abord des codes dans l'onglet « Codes analytiques » pour pouvoir les choisir ici.")
+
+    with st.expander("➕ Attribution groupée (plusieurs départements en une fois)"):
+        st.caption(
+            "Applique le même compte, la même famille et le même code analytique à plusieurs "
+            "départements d'un coup, pour un point de vente donné — évite de créer une ligne par "
+            "département à la main. Écrit directement dans le référentiel (indépendant du bouton "
+            "« Enregistrer » tout en bas, qui ne concerne que les modifications faites dans la grille)."
+        )
+        with st.form("form_attribution_groupee", clear_on_submit=True):
+            gc1, gc2 = st.columns(2)
+            g_compte_affiche = gc1.selectbox(
+                "Compte comptable", options=comptes_options, index=None, placeholder="Choisir un compte"
+            )
+            g_pdv = gc2.selectbox(
+                "Point de vente", options=pdv_options, index=None, placeholder="Choisir un point de vente"
+            )
+            g_departements = st.multiselect("Départements LightSpeed (un ou plusieurs)", options=departements_options)
+            gc3, gc4 = st.columns(2)
+            g_code_affiche = gc3.selectbox(
+                "Code analytique", options=codes_analytiques_options, index=None, placeholder="Choisir un code"
+            )
+            g_famille = gc4.text_input(
+                "Famille analytique",
+                value=mappings.get("parametres", {}).get("famille_categorie_analytique", "POINT_DE_VENTE"),
+            )
+            g_commentaires = st.text_input("Commentaires (optionnel)")
+            submit_groupe = st.form_submit_button("Appliquer aux départements sélectionnés", type="primary")
+
+        if submit_groupe:
+            if not (g_compte_affiche and g_pdv and g_departements and g_code_affiche):
+                st.error("Compte, point de vente, au moins un département et code analytique sont obligatoires.")
+            else:
+                g_compte = _code_depuis_affichage(g_compte_affiche)
+                g_code = _code_depuis_affichage(g_code_affiche)
+                mappings_actuels = load_mappings(client_id)
+                lignes = mappings_actuels.setdefault("comptes_analytiques", [])
+                nb_crees, nb_maj = 0, 0
+                for dep in g_departements:
+                    existante = find_code_analytique(mappings_actuels, g_compte, g_pdv, dep)
+                    if existante is not None:
+                        existante["famille"] = g_famille
+                        existante["code_analytique"] = g_code
+                        if g_commentaires:
+                            existante["commentaires"] = g_commentaires
+                        nb_maj += 1
+                    else:
+                        lignes.append(
+                            {
+                                "compte": g_compte,
+                                "point_de_vente": g_pdv,
+                                "categorie_lightspeed": dep,
+                                "famille": g_famille,
+                                "code_analytique": g_code,
+                                "commentaires": g_commentaires,
+                            }
+                        )
+                        nb_crees += 1
+                save_mappings(client_id, mappings_actuels)
+                st.session_state.pop("resultats", None)
+                st.success(f"{nb_crees} ligne(s) créée(s), {nb_maj} mise(s) à jour.")
+                st.rerun()
+
     attribution_source = [
         {
             **a,
-            "compte": _affichage_depuis_code(a.get("compte", ""), edited_comptes, "compte", "libelle_compte"),
+            "compte": _affichage_depuis_code(
+                a.get("compte", ""), mappings.get("comptes_de_vente", []), "compte", "libelle_compte"
+            ),
             "code_analytique": _affichage_depuis_code(
-                a.get("code_analytique", ""), edited_codes_analytiques, "code_analytique", "description"
+                a.get("code_analytique", ""), mappings.get("codes_analytiques", []), "code_analytique", "description"
             ),
         }
         for a in mappings.get("comptes_analytiques", [])
@@ -265,9 +353,7 @@ with tab_attribution:
         column_config={
             "compte": st.column_config.SelectboxColumn("Compte comptable", options=comptes_options, required=True),
             "point_de_vente": st.column_config.SelectboxColumn(
-                "Point de vente",
-                options=[p["code"] for p in edited_pdv] if edited_pdv else [],
-                required=True,
+                "Point de vente", options=pdv_options, required=True
             ),
             "categorie_lightspeed": st.column_config.SelectboxColumn(
                 "Département LightSpeed", options=departements_options, required=True
