@@ -20,11 +20,23 @@ Bloc 1 - Ventes par référence comptable (catégorie) :
     un fichier comptable.
 
 Bloc 2 - Encaissements :
-    Modes de paiement | Montant (Moins retour)
+    Modes de paiement | Montant (Moins retour) [| Pourboire | Montant (Moins les pourboires)]
     ... une ligne par mode de paiement, terminée par "Total des paiements",
     puis, le cas échéant, "Total des reports" (+détail, optionnel — absent
     quand il n'y a pas d'écart de caisse reporté), puis les totaux généraux
     "Total EUR", "Total taxes EUR", "Total EUR (Moins les taxes)".
+
+    IMPORTANT : sur les exports avec pourboires, LightSpeed ajoute deux
+    colonnes ("Pourboire", "Montant (Moins les pourboires)") et déplace TOUS
+    les totaux agrégés (Total des paiements, Total des reports, Total EUR...)
+    dans la dernière colonne ("Montant (Moins les pourboires)", nette des
+    pourboires) plutôt que "Montant (Moins retour)" (colonne 1, brute).
+    Les pourboires n'étant pas utiles à l'analytique et devant être exclus
+    des montants comptabilisés, le parseur détecte cette colonne par
+    intitulé et l'utilise pour TOUT le bloc (lignes individuelles ET totaux)
+    quand elle existe — ignorant de fait la colonne "Pourboire" elle-même et
+    la colonne brute. Sans cette colonne (export sans pourboire), on retombe
+    sur la colonne 1 comme avant.
 
 Formats supportés : .xls (ancien binaire Excel), .xlsx, .csv (séparateur ;
 ou ,, détecté automatiquement).
@@ -239,6 +251,25 @@ def _locate_ventes_columns(header_row: list[str], filename: str) -> dict:
     }
 
 
+_LABEL_MONTANT_NET_POURBOIRES = "Montant (Moins les pourboires)"
+_LABEL_MONTANT_BRUT = "Montant (Moins retour)"
+
+
+def _locate_montant_paiement_column(header_row: list[str]) -> int:
+    """Colonne à utiliser pour TOUS les montants du bloc « Modes de paiement »
+    (lignes individuelles et totaux agrégés) : la colonne nette des pourboires
+    si elle existe (export avec pourboires), sinon la colonne brute usuelle -
+    jamais une position figée, pour ne pas casser silencieusement si
+    LightSpeed réordonne encore ses colonnes."""
+    for i, v in enumerate(header_row):
+        if v == _LABEL_MONTANT_NET_POURBOIRES:
+            return i
+    for i, v in enumerate(header_row):
+        if v == _LABEL_MONTANT_BRUT:
+            return i
+    return 1  # dernier recours : position historique, fichiers très simples sans en-tête détaillé
+
+
 def parse_lightspeed_export(file_bytes: bytes, filename: str) -> LightspeedExport:
     """Lit un export comptable LightSpeed (.xls / .xlsx / .csv) et retourne sa structure."""
     try:
@@ -330,11 +361,13 @@ def parse_lightspeed_export(file_bytes: bytes, filename: str) -> LightspeedExpor
         # On pilote uniquement par intitulé de ligne, jamais par position, pour
         # rester robuste à ces variations et à d'éventuelles futures.
         p_idx = paiement_hdr[0]
+        paiement_header_row = [_norm(v) for v in df.iloc[p_idx].tolist()]
+        idx_montant = _locate_montant_paiement_column(paiement_header_row)
         state = "PAIEMENTS"
         j = p_idx + 1
         while j < len(df):
             lbl = _norm(df.iat[j, 0])
-            val = round(_num(df.iat[j, 1]), 2)
+            val = round(_num(df.iat[j, idx_montant]), 2)
 
             if state == "PAIEMENTS":
                 if lbl == "Total des paiements":

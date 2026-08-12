@@ -255,3 +255,59 @@ def test_convert_csv_variant_balances_and_preserves_ca():
     # Trois comptes de TVA distincts doivent apparaître (5.5 / 10 / 20 %)
     comptes_tva_generes = {l["Numéro de compte"] for l in res.lignes if "TVA collectée" in l["Libellé de ligne"]}
     assert comptes_tva_generes == {"445710", "445711", "445712"}
+
+
+# --- Variante avec pourboires : LightSpeed ajoute "Pourboire" et "Montant
+#     (Moins les pourboires)", et déplace TOUS les totaux agrégés dans cette
+#     dernière colonne plutôt que "Montant (Moins retour)" (la brute). Les
+#     pourboires doivent être exclus des montants comptabilisés. ------------
+
+_SAMPLE_CSV_AVEC_POURBOIRES = (
+    "Références comptables;Quantité;Total;Rabais;;Montant taxé;TVA 20%;Total taxes;%;Total HT\r\n"
+    "Plat;1;100.0;;100.0;100.0;16.6667;16.6667;100.0;83.3333\r\n"
+    "Total EUR;1;100.0;;100.0;100.0;16.6667;16.6667;100.0;83.3333\r\n"
+    ";;;;;;;;;\r\n"
+    "Modes de paiement;Montant (Moins retour);Pourboire;Montant (Moins les pourboires);;;;;;\r\n"
+    "ESPECES;50.0;0.0;50.0;;;;;;\r\n"
+    "VISA MASTERCARD;60.0;10.0;50.0;;;;;;\r\n"
+    "Total des paiements;;;100.0;;;;;;\r\n"
+    "Total EUR;;;100.0;;;;;;\r\n"
+    "Total taxes EUR;;;16.6667;;;;;;\r\n"
+    "Total EUR (Moins les taxes);;;83.3333;;;;;;"
+).encode("utf-8")
+
+
+def test_parse_exclut_les_pourboires_des_montants_de_paiement():
+    export = parse_lightspeed_export(_SAMPLE_CSV_AVEC_POURBOIRES, "export.csv")
+    # 60€ bruts sur la carte, dont 10€ de pourboire -> 50€ nets retenus, pas 60€.
+    montants = {p.libelle: p.montant for p in export.paiements}
+    assert montants == {"ESPECES": 50.0, "VISA MASTERCARD": 50.0}
+    assert export.total_paiements == 100.0
+    assert export.total_eur_final == 83.33 + 16.67  # == 100.0, cohérent avec les ventes TTC
+    assert export.ca_ttc == 100.0
+    assert export.ventes_encaissements_coherents
+
+
+def test_convert_avec_pourboires_ne_gonfle_pas_l_ecart():
+    """Avant correction : le pourboire de 10€ inclus dans le montant carte
+    gonflait artificiellement l'écart de régularisation de 10€. Ici, sans
+    aucun report déclaré, l'écriture doit s'équilibrer exactement sans écart."""
+    export = parse_lightspeed_export(_SAMPLE_CSV_AVEC_POURBOIRES, "export.csv")
+    mappings = {
+        **DEFAULT_MAPPINGS,
+        "comptes_de_vente": [{"compte": "70110200", "libelle_compte": "VENTE LIQUIDE TVA 20%"}],
+        "departements": [{"categorie_lightspeed": "Plat", "compte": "70110200", "taux_tva": "20%"}],
+        "comptes_analytiques": [
+            {"compte": "70110200", "point_de_vente": "REST", "categorie_lightspeed": "Plat", "code_analytique": "REST"}
+        ],
+        "comptes_paiement": [
+            {"mode_paiement": "ESPECES", "compte": "530000", "libelle_compte": "Caisse"},
+            {"mode_paiement": "VISA MASTERCARD", "compte": "511100", "libelle_compte": "Remises CB"},
+        ],
+    }
+    res = convert(export, mappings, point_de_vente="REST", date_piece="11/08/26", numero_piece="LS-TEST")
+    assert res.sans_erreur, res.erreurs
+    assert res.equilibre_ok
+    assert res.ecart_calcule == 0.0
+    assert not res.avertissements
+    assert res.total_debit == res.total_credit == 100.0
