@@ -15,6 +15,7 @@ from __future__ import annotations
 import datetime as dt
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from core.client_store import get_client
 from core.converter import convert
@@ -47,6 +48,15 @@ def _deviner_index_pdv(filename: str, points_de_vente: list[dict]) -> int:
 
 client_id = select_client()
 
+# Client actif rappelé en tête de page, au-dessus du titre : le référentiel
+# (comptes, points de vente, codes analytiques...) appliqué au fichier déposé
+# ci-dessous est TOUJOURS celui de ce client — s'assurer que c'est le bon
+# avant d'importer. Pas de bloc encadré séparé (redondant avec le sélecteur
+# de client déjà présent dans le menu latéral) : une simple ligne suffit.
+if client_id is not None:
+    client = get_client(client_id)
+    st.markdown(f"🏢 **Client actif : {client['nom']}**")
+
 st.title("🧾 Convertisseur LightSpeed → Pennylane")
 st.caption(
     "Importez un ou plusieurs exports comptables LightSpeed, associez chaque fichier à son "
@@ -57,20 +67,6 @@ st.caption(
 if client_id is None:
     st.info("Créez un client (menu latéral, ou page **Clients**) avant de pouvoir convertir un fichier.")
     st.stop()
-
-# Client actif mis en évidence en tête de page : le référentiel (comptes,
-# points de vente, codes analytiques...) appliqué au fichier déposé ci-dessous
-# est TOUJOURS celui de ce client — s'assurer que c'est le bon avant d'importer.
-client = get_client(client_id)
-with st.container(border=True):
-    cc1, cc2 = st.columns([4, 1])
-    cc1.markdown(f"#### 🏢 Client actif : {client['nom']}")
-    cc1.caption(
-        f"Référentiel et historique appliqués : ceux de ce client (`{client_id}`). "
-        "Vérifiez qu'il s'agit bien du bon client avant de déposer un fichier."
-    )
-    if cc2.button("Changer de client", use_container_width=True):
-        st.switch_page("pages/clients.py")
 
 mappings = load_mappings(client_id)
 points_de_vente = mappings.get("points_de_vente", [])
@@ -83,7 +79,71 @@ if not pdv_codes:
     )
 
 st.divider()
-st.subheader("1. Importer le ou les exports LightSpeed")
+st.subheader("Importer le ou les exports LightSpeed")
+
+# Bloc de dépôt agrandi de 50% (plus facile à viser) et libellés traduits :
+# st.file_uploader ne propose ni paramètre de taille ni de traduction de ses
+# textes intégrés ("Upload", "200MB per file..."), ce qui impose un correctif
+# CSS (taille) + JS (traduction, rejouée à chaque rendu puisque Streamlit
+# reconstruit le DOM à chaque interaction).
+st.markdown(
+    """
+    <style>
+    div[data-testid="stFileUploaderDropzone"] {
+        min-height: 102px !important; /* 68px d'origine, +50% */
+        padding: 24px !important;
+    }
+    div[data-testid="stFileUploaderDropzone"] span[data-testid="stIconMaterial"] {
+        font-size: 1.5em !important;
+    }
+    div[data-testid="stFileUploaderDropzone"] button[data-testid="stBaseButton-secondary"] p {
+        font-size: 1.1rem !important;
+    }
+    div[data-testid="stFileUploaderDropzoneInstructions"] span {
+        font-size: 1.05rem !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+components.html(
+    r"""
+    <script>
+    const traductions = [
+        [/^Upload$/, "Parcourir les fichiers"],
+        [/^Browse files$/, "Parcourir les fichiers"],
+        [/^Drag and drop file(s)? here$/, "Glissez-déposez votre fichier ici"],
+        [/^(\d+)MB per file(.*)$/, "$1 Mo par fichier$2"],
+    ];
+
+    function traduireNoeud(node) {
+        if (node.nodeType === Node.TEXT_NODE) {
+            const original = node.textContent;
+            const cible = original.trim();
+            for (const [motif, remplacement] of traductions) {
+                if (motif.test(cible)) {
+                    const nouveau = original.replace(motif, remplacement);
+                    if (nouveau !== original) node.textContent = nouveau;
+                    return;
+                }
+            }
+        } else {
+            node.childNodes.forEach(traduireNoeud);
+        }
+    }
+
+    function traduireTout() {
+        traduireNoeud(window.parent.document.body);
+    }
+
+    new MutationObserver(traduireTout).observe(window.parent.document.body, {
+        childList: true, subtree: true, characterData: true,
+    });
+    traduireTout();
+    </script>
+    """,
+    height=0,
+)
 
 uploaded_files = st.file_uploader(
     "Fichier(s) export comptable LightSpeed (.xls / .xlsx / .csv)",
