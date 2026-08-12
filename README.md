@@ -67,7 +67,12 @@ dur dans le code), propres à chaque client, persistées dans
   même compte peut porter un code analytique différent selon le
   département, même sur un seul et même point de vente.
 - **Contreparties de paiement** : mode de paiement LightSpeed → compte de
-  banque/caisse/créance plateforme.
+  banque/caisse/créance plateforme. Un mode non mappé ici bloque l'export.
+- **Modes de paiement ignorés** : intitulés (bloc « Modes de paiement »
+  uniquement, correspondance exacte) à exclure totalement de l'écriture —
+  aucune ligne générée, à la différence d'un mode non mappé qui bloque.
+  Réservé aux lignes sans valeur comptable propre, jamais pour écarter un
+  montant réel dont on ne sait pas où l'imputer.
 - **TVA collectée** : taux de TVA → compte de TVA collectée.
 - **Paramètres généraux** (page Réglages) : code journal, code pays,
   compte d'écart utilisé pour équilibrer un éventuel report d'encaissement,

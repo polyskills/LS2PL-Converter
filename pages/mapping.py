@@ -90,7 +90,16 @@ if client_id is None:
 
 mappings = load_mappings(client_id)
 
-tab_pdv, tab_comptes, tab_departements, tab_codes_analytiques, tab_attribution, tab_paiement, tab_tva = st.tabs(
+(
+    tab_pdv,
+    tab_comptes,
+    tab_departements,
+    tab_codes_analytiques,
+    tab_attribution,
+    tab_paiement,
+    tab_paiement_ignores,
+    tab_tva,
+) = st.tabs(
     [
         "Points de vente",
         "Comptes de vente",
@@ -98,6 +107,7 @@ tab_pdv, tab_comptes, tab_departements, tab_codes_analytiques, tab_attribution, 
         "Codes analytiques",
         "Attribution analytique",
         "Contreparties de paiement",
+        "Modes de paiement ignorés",
         "TVA collectée",
     ]
 )
@@ -303,6 +313,31 @@ with tab_paiement:
     )
     edited_paiement = edited_paiement_df.dropna(how="all").fillna("").to_dict("records")
 
+with tab_paiement_ignores:
+    st.markdown(
+        "Intitulés de **mode de paiement** (bloc « Modes de paiement » de l'export LightSpeed "
+        "uniquement) à **exclure totalement** de l'écriture générée : aucune ligne de débit/crédit "
+        "n'est créée pour eux, contrairement à un mode non mappé dans l'onglet précédent qui bloque "
+        "l'export. Correspondance **exacte** (insensible à la casse et aux espaces superflus). "
+        "⚠️ À réserver aux lignes sans valeur comptable propre — jamais pour écarter un montant réel "
+        "dont on ne sait juste pas où l'imputer (ça, c'est le rôle du compte d'écart, page Réglages)."
+    )
+    edited_paiement_ignores_df = st.data_editor(
+        _as_editable_df(
+            mappings.get("modes_paiement_ignores", []), ["mode_paiement", "commentaires"], tri="mode_paiement"
+        ),
+        num_rows="dynamic",
+        use_container_width=True,
+        key="editor_paiement_ignores",
+        column_config={
+            "mode_paiement": st.column_config.TextColumn(
+                "Mode de paiement à ignorer", required=True, help="Intitulé exact tel qu'il apparaît dans l'export LightSpeed."
+            ),
+            "commentaires": st.column_config.TextColumn("Commentaires", help="Pourquoi cette ligne est ignorée."),
+        },
+    )
+    edited_paiement_ignores = edited_paiement_ignores_df.dropna(how="all").fillna("").to_dict("records")
+
 with tab_tva:
     st.markdown("Compte de **TVA collectée** à utiliser pour chaque taux de TVA rencontré dans les ventes.")
     edited_tva_df = st.data_editor(
@@ -336,6 +371,7 @@ if b1.button("💾 Enregistrer les tables de correspondance", type="primary"):
             "codes_analytiques": edited_codes_analytiques,
             "comptes_analytiques": edited_attribution,
             "comptes_paiement": edited_paiement,
+            "modes_paiement_ignores": edited_paiement_ignores,
             "comptes_tva": edited_tva,
         },
     )

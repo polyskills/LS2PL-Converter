@@ -98,6 +98,59 @@ def test_code_pays_uniquement_sur_comptes_classe_6_ou_7():
     assert all(l["Code pays du compte"] == "" for l in lignes_autres)
 
 
+_SAMPLE_CSV_AVEC_LIGNE_TECHNIQUE = (
+    "Références comptables;Quantité;Total;Rabais;;Montant taxé;TVA 10%;Total taxes;%;Total HT\r\n"
+    "Cuisine - Entrée;1;11.0;;11.0;11.0;1.0;1.0;100.0;10.0\r\n"
+    "Total EUR;1;11.0;;11.0;11.0;1.0;1.0;100.0;10.0\r\n"
+    ";;;;;;;;;\r\n"
+    "Modes de paiement;Montant (Moins retour);;;;;;;;\r\n"
+    "Carte bleue;11.0;;;;;;;;\r\n"
+    "Ligne technique;5.0;;;;;;;;\r\n"
+    "Total EUR;11.0;;;;;;;;\r\n"
+    "Total taxes EUR;1.0;;;;;;;;\r\n"
+    "Total EUR (Moins les taxes);10.0;;;;;;;;"
+).encode("utf-8")
+
+
+def test_mode_paiement_ignore_exclu_sans_generer_de_ligne():
+    """Un mode de paiement listé dans « Modes de paiement ignorés » ne doit
+    générer aucune ligne (ni débit ni crédit), contrairement à un mode non
+    mappé qui bloquerait l'export - mais reste signalé en avertissement."""
+    export = parse_lightspeed_export(_SAMPLE_CSV_AVEC_LIGNE_TECHNIQUE, "export.csv")
+    mappings = {
+        **DEFAULT_MAPPINGS,
+        "departements": [{"categorie_lightspeed": "Cuisine - Entrée", "compte": "70110010", "taux_tva": "10%"}],
+        "comptes_analytiques": [
+            {"compte": "70110010", "point_de_vente": "REST", "categorie_lightspeed": "Cuisine - Entrée", "code_analytique": "REST"}
+        ],
+        "modes_paiement_ignores": [{"mode_paiement": "Ligne technique", "commentaires": "Test"}],
+    }
+    res = convert(export, mappings, point_de_vente="REST", date_piece="26/05/26", numero_piece="LS-TEST")
+
+    assert res.sans_erreur, res.erreurs
+    assert res.ca_ok
+    assert res.equilibre_ok
+    assert not any("Ligne technique" in l["Libellé de ligne"] for l in res.lignes)
+    assert any("Ligne technique" in a and "ignoré" in a for a in res.avertissements)
+
+
+def test_mode_paiement_ignore_correspondance_exacte_uniquement():
+    """La correspondance est exacte : un intitulé proche mais différent n'est
+    pas ignoré, il reste soumis au mapping normal (et bloque s'il est absent)."""
+    export = parse_lightspeed_export(_SAMPLE_CSV_AVEC_LIGNE_TECHNIQUE, "export.csv")
+    mappings = {
+        **DEFAULT_MAPPINGS,
+        "departements": [{"categorie_lightspeed": "Cuisine - Entrée", "compte": "70110010", "taux_tva": "10%"}],
+        "comptes_analytiques": [
+            {"compte": "70110010", "point_de_vente": "REST", "categorie_lightspeed": "Cuisine - Entrée", "code_analytique": "REST"}
+        ],
+        "modes_paiement_ignores": [{"mode_paiement": "Ligne", "commentaires": "Ne doit pas matcher"}],
+    }
+    res = convert(export, mappings, point_de_vente="REST", date_piece="26/05/26", numero_piece="LS-TEST")
+    assert not res.sans_erreur
+    assert any("Ligne technique" in e and "non mappé" in e for e in res.erreurs)
+
+
 def test_missing_mapping_reports_error_and_ca_mismatch():
     export = parse_lightspeed_export(_build_sample_xlsx(), "test_export.xlsx")
     mappings = {**DEFAULT_MAPPINGS, "departements": []}

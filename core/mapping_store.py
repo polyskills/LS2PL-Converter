@@ -30,6 +30,14 @@ Tables :
                          cette combinaison figée, une résolution dynamique
                          sera nécessaire à la place.
 - comptes_paiement     : Mode de paiement LightSpeed -> Compte de contrepartie (banque/caisse)
+- modes_paiement_ignores : intitulés de mode de paiement (correspondance
+                         EXACTE, insensible à la casse/espaces) à exclure
+                         purement et simplement du bloc "Modes de paiement" -
+                         aucune ligne de débit/crédit générée pour eux, à la
+                         différence d'un mode non mappé qui bloque l'export.
+                         Réservé aux lignes sans valeur comptable propre :
+                         jamais pour écarter un montant réel dont on ne sait
+                         juste pas où l'imputer (cf. compte_ecart pour ça).
 - comptes_tva          : Taux de TVA -> Compte de TVA collectée
 - points_de_vente      : liste des points de vente connus (code + libellé + adresse mail
                          de réception de l'export automatique, optionnelle)
@@ -59,6 +67,7 @@ EMPTY_MAPPINGS = {
     "codes_analytiques": [],
     "comptes_analytiques": [],
     "comptes_paiement": [],
+    "modes_paiement_ignores": [],
     "comptes_tva": [],
     # Indicateur interne (jamais affiché/édité) : marque qu'un client a déjà
     # reçu son référentiel de départ une fois - cf. core.bootstrap. Empêche
@@ -276,6 +285,15 @@ def find_compte_paiement(mappings: dict, mode_paiement: str) -> dict | None:
         if _norm_key(row.get("mode_paiement", "")) == target:
             return row
     return None
+
+
+def est_mode_paiement_ignore(mappings: dict, mode_paiement: str) -> bool:
+    """True si ce mode de paiement doit être totalement exclu du bloc
+    Règlements (ni débit ni crédit généré) - correspondance exacte
+    (insensible casse/espaces), jamais partielle : un intitulé ambigu doit
+    être ajouté explicitement, pas deviné par une correspondance floue."""
+    target = _norm_key(mode_paiement)
+    return any(_norm_key(row.get("mode_paiement", "")) == target for row in mappings.get("modes_paiement_ignores", []))
 
 
 def find_compte_tva(mappings: dict, taux: str) -> dict | None:

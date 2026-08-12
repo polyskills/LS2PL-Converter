@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 
 from core.lightspeed_parser import LightspeedExport
 from core.mapping_store import (
+    est_mode_paiement_ignore,
     find_code_analytique,
     find_compte_paiement,
     find_compte_reference,
@@ -201,6 +202,16 @@ def convert(
         ligne_id += 1
 
     for p in export.paiements:
+        if est_mode_paiement_ignore(mappings, p.libelle):
+            # Exclusion volontaire et explicite (référentiel « Modes de paiement
+            # ignorés ») : aucune ligne générée pour ce montant, à la différence
+            # d'un mode non mappé qui bloque. Toujours signalé pour ne rien
+            # cacher, même si ça n'impacte pas l'équilibrage de l'écriture.
+            res.avertissements.append(
+                f"Mode de paiement « {p.libelle} » ignoré conformément au paramétrage "
+                f"({p.montant:.2f} € exclu de l'écriture, aucune ligne générée)."
+            )
+            continue
         compte_p = find_compte_paiement(mappings, p.libelle)
         if compte_p is None:
             res.erreurs.append(
