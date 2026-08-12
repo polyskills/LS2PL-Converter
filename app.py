@@ -13,6 +13,8 @@ import streamlit as st
 
 st.set_page_config(page_title="LightSpeed → Pennylane", page_icon="🧾", layout="wide")
 
+st.logo("assets/logo.png", size="large")
+
 pages = {
     "Conversion": [
         st.Page("pages/converter.py", title="Convertisseur", icon="🧾", default=True),
