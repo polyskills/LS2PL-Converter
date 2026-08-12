@@ -310,13 +310,6 @@ with tab_attribution:
         ]
     )
 
-    # Streamlit interdit de modifier st.session_state["table_groupes_attribution"] une fois le
-    # widget instancié dans le MÊME run (StreamlitAPIException) : la désélection après
-    # enregistrement/suppression passe donc par un indicateur intermédiaire, consommé ici,
-    # AVANT que le tableau ci-dessous ne soit créé.
-    if st.session_state.pop("_reset_selection_attribution", False):
-        st.session_state["table_groupes_attribution"] = {"selection": {"rows": [], "columns": [], "cells": []}}
-
     st.markdown("#### Attributions existantes")
     st.caption(
         "Clique sur une ligne pour la modifier ou la supprimer dans le formulaire ci-dessous. "
@@ -326,13 +319,19 @@ with tab_attribution:
         st.info("Aucune attribution enregistrée pour l'instant.")
         selection_event = None
     else:
+        # Streamlit interdit toute écriture dans st.session_state pour ce type de widget (même
+        # avant son instanciation, selon la version) : impossible de désélectionner une ligne
+        # "de force" après enregistrement/suppression. On force donc un nouveau widget (donc sans
+        # sélection) en faisant varier sa clé, via un compteur - lui, un simple session_state
+        # ordinaire, s'incrémente sans restriction.
+        table_key = f"table_groupes_attribution_{st.session_state.get('_version_table_attribution', 0)}"
         selection_event = st.dataframe(
             groupes_df,
             hide_index=True,
             use_container_width=True,
             on_select="rerun",
             selection_mode="single-row",
-            key="table_groupes_attribution",
+            key=table_key,
         )
 
     selected_idx = None
@@ -407,7 +406,7 @@ with tab_attribution:
         lignes[:] = [l for l in lignes if not _appartient_au_groupe(l, selected_key)]
         save_mappings(client_id, mappings_actuels)
         st.session_state.pop("resultats", None)
-        st.session_state["_reset_selection_attribution"] = True
+        st.session_state["_version_table_attribution"] = st.session_state.get("_version_table_attribution", 0) + 1
         st.success("Attribution supprimée.")
         st.rerun()
 
@@ -445,7 +444,7 @@ with tab_attribution:
 
             save_mappings(client_id, mappings_actuels)
             st.session_state.pop("resultats", None)
-            st.session_state["_reset_selection_attribution"] = True
+            st.session_state["_version_table_attribution"] = st.session_state.get("_version_table_attribution", 0) + 1
             st.success(f"Attribution enregistrée ({len(f_departements)} département(s)).")
             st.rerun()
 
