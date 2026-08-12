@@ -74,7 +74,8 @@ st.caption(
     "La boîte mail vit dans le tenant M365 du client. Une adresse dédiée par point de vente se "
     "paramètre dans « Table de correspondance » ; ici, uniquement le tenant et la boîte mail à "
     "interroger. Laisser vide désactive le fetch automatique pour ce client. "
-    "Voir `deploy/windows/README.md` pour la mise en place complète (app Azure AD, consentement admin, service)."
+    "Voir `deploy/windows/README.md` ou `deploy/macos/README.md` (selon l'OS d'hébergement) pour la mise en "
+    "place complète (app Azure AD, consentement admin, service)."
 )
 ce1, ce2 = st.columns(2)
 tenant_id = ce1.text_input(

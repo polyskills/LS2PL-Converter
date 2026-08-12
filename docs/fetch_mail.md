@@ -3,7 +3,8 @@
 Fonctionnement détaillé de la réception automatique — en complément de la
 checklist de mise en route ([mise_en_route.md](mise_en_route.md)) et des
 commandes d'installation du service
-([deploy/windows/README.md](../deploy/windows/README.md)).
+([deploy/windows/README.md](../deploy/windows/README.md) ou
+[deploy/macos/README.md](../deploy/macos/README.md) selon l'OS d'hébergement).
 
 ## Pourquoi
 

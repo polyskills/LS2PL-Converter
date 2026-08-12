@@ -33,8 +33,10 @@ conversion **bloque volontairement** l'export (jamais de perte silencieuse)
 
 Uniquement nécessaire si le client veut recevoir la conversion sans passer
 par un import manuel. Voir **[fetch_mail.md](fetch_mail.md)** pour le
-fonctionnement détaillé, et
+fonctionnement détaillé, et selon l'OS d'hébergement,
 **[deploy/windows/README.md](../deploy/windows/README.md#service-de-fetch-automatique-des-exports-lightspeed-par-mail-optionnel)**
+ou
+**[deploy/macos/README.md](../deploy/macos/README.md#service-de-fetch-automatique-des-exports-lightspeed-par-mail-optionnel)**
 pour l'installation du service. En résumé :
 
 - [ ] Une adresse mail dédiée par point de vente, créée côté client

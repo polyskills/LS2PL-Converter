@@ -115,10 +115,14 @@ streamlit run app.py
 ## Déploiement en serveur partagé (équipe, disque persistant)
 
 Pour un hébergement central accessible à toute l'équipe via navigateur,
-avec un vrai disque persistant (contrairement à Streamlit Community
-Cloud) : voir **[deploy/windows/README.md](deploy/windows/README.md)**
-(installation en service Windows via NSSM — démarrage automatique,
-redémarrage sur plantage, mise à jour et désinstallation scriptées).
+avec un vrai disque persistant (contrairement à Streamlit Community Cloud) :
+- Windows : **[deploy/windows/README.md](deploy/windows/README.md)**
+  (installation en service Windows via NSSM)
+- macOS : **[deploy/macos/README.md](deploy/macos/README.md)**
+  (installation en service via LaunchDaemon)
+
+Les deux installent un vrai service (démarrage automatique au boot,
+redémarrage sur plantage), avec mise à jour et désinstallation scriptées.
 
 ## Tests
 

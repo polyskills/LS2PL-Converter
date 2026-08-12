@@ -3,8 +3,8 @@ Point d'entrée du service de fetch automatique des exports LightSpeed.
 
 Boucle infinie : un cycle (core.email_poller.executer_un_cycle) toutes les
 `LSPENNYLANE_POLL_INTERVAL_SECONDS` secondes (300 par défaut). Prévu pour
-tourner comme second service Windows, indépendant de l'app Streamlit
-(voir deploy/windows).
+tourner comme second service, indépendant de l'app Streamlit
+(voir deploy/windows ou deploy/macos selon l'OS d'hébergement).
 
 Variables d'environnement requises :
 - LSPENNYLANE_AZURE_CLIENT_ID     : App ID de l'app Azure AD Polyskills (multi-tenant)
