@@ -7,6 +7,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from core.client_store import get_client
 from core.mapping_store import load_mappings, reset_to_empty, save_mappings, seed_with_examples
 from core.ui_common import select_client
 
@@ -88,6 +89,7 @@ st.caption(
 if client_id is None:
     st.stop()
 
+client = get_client(client_id)
 mappings = load_mappings(client_id)
 
 (
@@ -540,7 +542,23 @@ if b1.button("💾 Enregistrer", type="primary"):
     st.session_state.pop("resultats", None)
     st.success("Tables de correspondance enregistrées.")
 
+_cle_confirmation_vidage = f"confirmation_vidage_{client_id}"
+
 if b2.button("🗑️ Vider ce référentiel"):
-    reset_to_empty(client_id)
-    st.session_state.pop("resultats", None)
-    st.rerun()
+    st.session_state[_cle_confirmation_vidage] = True
+
+if st.session_state.get(_cle_confirmation_vidage):
+    st.warning(
+        f"⚠️ Ceci supprime **définitivement** tout le référentiel de « {client['nom']} » "
+        "(comptes, départements, attributions analytiques, modes de paiement, TVA...) — "
+        "aucun moyen de revenir en arrière. Confirmer ?"
+    )
+    cv1, cv2, _ = st.columns([1, 1, 4])
+    if cv1.button("✅ Oui, tout supprimer", type="primary"):
+        reset_to_empty(client_id)
+        st.session_state.pop("resultats", None)
+        st.session_state.pop(_cle_confirmation_vidage, None)
+        st.rerun()
+    if cv2.button("Annuler"):
+        st.session_state.pop(_cle_confirmation_vidage, None)
+        st.rerun()

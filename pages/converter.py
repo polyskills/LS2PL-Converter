@@ -25,6 +25,26 @@ from core.pennylane_export import build_pennylane_csv
 from core.timezone import now_local
 from core.ui_common import select_client
 
+
+def _deviner_index_pdv(filename: str, points_de_vente: list[dict]) -> int:
+    """Propose un point de vente par défaut à partir du **nom de fichier brut**
+    (jamais du contenu de l'export, qui ne porte aucune information de point
+    de vente) : recherche le code ou le libellé de chaque point de vente
+    configuré, en toutes lettres, dans le nom de fichier. En cas de plusieurs
+    correspondances (ex. « BAR » et « BARF » matchent tous les deux un nom
+    contenant « barf »), retient la plus longue, plus spécifique. Simple
+    suggestion pré-remplie dans le menu déroulant, jamais imposée : à
+    valider/corriger manuellement avant conversion."""
+    nom_normalise = filename.strip().lower()
+    meilleur_index, meilleure_longueur = 0, 0
+    for i, p in enumerate(points_de_vente):
+        for candidat in (p.get("code", ""), p.get("libelle", "")):
+            candidat_normalise = candidat.strip().lower()
+            if candidat_normalise and candidat_normalise in nom_normalise and len(candidat_normalise) > meilleure_longueur:
+                meilleur_index, meilleure_longueur = i, len(candidat_normalise)
+    return meilleur_index
+
+
 client_id = select_client()
 
 st.title("🧾 Convertisseur LightSpeed → Pennylane")
@@ -84,12 +104,7 @@ if uploaded_files:
 
         with st.expander(f"📄 {uf.name}", expanded=True):
             c1, c2, c3, c4 = st.columns([2, 1.4, 1.4, 1.6])
-            default_pdv_index = 0
-            if export.point_de_vente_suggere:
-                for i, code in enumerate(pdv_codes):
-                    if code.lower() in export.point_de_vente_suggere.lower():
-                        default_pdv_index = i
-                        break
+            default_pdv_index = _deviner_index_pdv(uf.name, points_de_vente)
             with c1:
                 pdv = st.selectbox(
                     "Point de vente",
