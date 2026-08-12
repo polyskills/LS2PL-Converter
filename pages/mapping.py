@@ -93,22 +93,22 @@ mappings = load_mappings(client_id)
 (
     tab_pdv,
     tab_comptes,
-    tab_departements,
     tab_codes_analytiques,
-    tab_attribution,
+    tab_departements,
     tab_paiement,
     tab_paiement_ignores,
     tab_tva,
+    tab_attribution,
 ) = st.tabs(
     [
         "Points de vente",
-        "Comptes de vente",
-        "Départements LightSpeed",
-        "Codes analytiques",
+        "Comptes de vente PL",
+        "Codes Analytique PL",
+        "Départements LS",
+        "Moyens de paiements",
+        "Moyens de paiements ignorés",
+        "Taux de TVA",
         "Attribution analytique",
-        "Contreparties de paiement",
-        "Modes de paiement ignorés",
-        "TVA collectée",
     ]
 )
 
@@ -142,7 +142,7 @@ with tab_comptes:
     st.markdown(
         "**Référentiel des comptes de vente Pennylane** (plan comptable), indépendant de LightSpeed. "
         "Sert uniquement à proposer une liste de comptes valides (menu déroulant, affiché « code - "
-        "libellé » pour rester lisible) dans les tables « Départements LightSpeed » et "
+        "libellé » pour rester lisible) dans les onglets « Départements LS » et "
         "« Attribution analytique » — c'est *là-bas* que se fait le lien avec les catégories "
         "LightSpeed, pas ici."
     )
@@ -168,18 +168,46 @@ with tab_comptes:
     # qu'après un premier clic sur « Enregistrer » — c'est le compromis retenu pour la stabilité.
     comptes_options = _options_avec_libelle(mappings.get("comptes_de_vente", []), "compte", "libelle_compte")
 
+with tab_codes_analytiques:
+    st.markdown(
+        "**Référentiel pur des codes analytiques** existants côté Pennylane (code + description), "
+        "indépendant de LightSpeed — la simple liste des codes valides. Sert de liste de choix dans "
+        "l'onglet « Attribution analytique », qui décide *quand* utiliser quel code ; ce n'est pas le "
+        "cas ici."
+    )
+    edited_codes_analytiques_df = st.data_editor(
+        _as_editable_df(
+            mappings.get("codes_analytiques", []),
+            ["code_analytique", "description", "commentaires"],
+            tri="code_analytique",
+        ),
+        num_rows="dynamic",
+        use_container_width=True,
+        key="editor_codes_analytiques",
+        column_config={
+            "code_analytique": st.column_config.TextColumn("Code analytique", required=True),
+            "description": st.column_config.TextColumn("Description", required=True),
+            "commentaires": st.column_config.TextColumn("Commentaires"),
+        },
+    )
+    edited_codes_analytiques = edited_codes_analytiques_df.dropna(how="all").fillna("").to_dict("records")
+    # Même choix que pour comptes_options ci-dessus : basé sur l'état enregistré, pas le live.
+    codes_analytiques_options = _options_avec_libelle(
+        mappings.get("codes_analytiques", []), "code_analytique", "description"
+    )
+
 with tab_departements:
     st.markdown(
         "Correspondance entre chaque **département LightSpeed** (colonne « Références comptables » "
         "de l'export — LightSpeed n'a pas de notion de catégorie distincte du département) et son "
-        "**compte de vente** (choisi dans le référentiel de l'onglet précédent). Le **taux de TVA** "
+        "**compte de vente** (choisi dans l'onglet « Comptes de vente PL »). Le **taux de TVA** "
         "ici est purement informatif : le taux réellement appliqué à chaque ligne vient du fichier "
         "LightSpeed lui-même, pas de cette table. Tout département rencontré dans un fichier importé "
         "et absent d'ici bloquera l'export ; un département présent mais sans compte choisi bloque "
         "également (mieux vaut bloquer que deviner)."
     )
     if not comptes_options:
-        st.warning("Ajoutez d'abord des comptes dans l'onglet « Comptes de vente » pour pouvoir les choisir ici.")
+        st.warning("Ajoutez d'abord des comptes dans l'onglet « Comptes de vente PL » pour pouvoir les choisir ici.")
     # Départements réellement affectés à au moins une ligne d'attribution analytique, tous
     # points de vente/comptes confondus - purement informatif, calculé à la volée (jamais
     # enregistré), pour repérer d'un coup d'œil un département encore orphelin.
@@ -228,43 +256,85 @@ with tab_departements:
         for d in edited_departements_df.dropna(how="all").fillna("").to_dict("records")
     ]
 
-with tab_codes_analytiques:
+with tab_paiement:
     st.markdown(
-        "**Référentiel pur des codes analytiques** existants côté Pennylane (code + description), "
-        "indépendant de LightSpeed — la simple liste des codes valides. Sert de liste de choix dans "
-        "l'onglet « Attribution analytique », qui décide *quand* utiliser quel code ; ce n'est pas le "
-        "cas ici."
+        "Correspondance entre chaque **mode de paiement LightSpeed** (Carte bleue, Espèces, "
+        "Deliveroo, UberEats...) et son **compte de contrepartie** (banque, caisse, créance "
+        "plateforme) dans Pennylane. Un mode de paiement non mappé bloque également l'export "
+        "(l'écriture serait déséquilibrée)."
     )
-    edited_codes_analytiques_df = st.data_editor(
+    edited_paiement_df = st.data_editor(
         _as_editable_df(
-            mappings.get("codes_analytiques", []),
-            ["code_analytique", "description", "commentaires"],
-            tri="code_analytique",
+            mappings.get("comptes_paiement", []),
+            ["mode_paiement", "compte", "libelle_compte", "commentaires"],
+            tri="mode_paiement",
         ),
         num_rows="dynamic",
         use_container_width=True,
-        key="editor_codes_analytiques",
+        key="editor_paiement",
         column_config={
-            "code_analytique": st.column_config.TextColumn("Code analytique", required=True),
-            "description": st.column_config.TextColumn("Description", required=True),
+            "mode_paiement": st.column_config.TextColumn("Mode de paiement LightSpeed", required=True),
+            "compte": st.column_config.TextColumn("Compte de contrepartie", required=True),
+            "libelle_compte": st.column_config.TextColumn("Libellé du compte"),
             "commentaires": st.column_config.TextColumn("Commentaires"),
         },
     )
-    edited_codes_analytiques = edited_codes_analytiques_df.dropna(how="all").fillna("").to_dict("records")
-    # Même choix que pour comptes_options ci-dessus : basé sur l'état enregistré, pas le live.
-    codes_analytiques_options = _options_avec_libelle(
-        mappings.get("codes_analytiques", []), "code_analytique", "description"
+    edited_paiement = edited_paiement_df.dropna(how="all").fillna("").to_dict("records")
+
+with tab_paiement_ignores:
+    st.markdown(
+        "Intitulés de **mode de paiement** (bloc « Modes de paiement » de l'export LightSpeed "
+        "uniquement) à **exclure totalement** de l'écriture générée : aucune ligne de débit/crédit "
+        "n'est créée pour eux, contrairement à un mode non mappé dans l'onglet précédent qui bloque "
+        "l'export. Correspondance **exacte** (insensible à la casse et aux espaces superflus). "
+        "⚠️ À réserver aux lignes sans valeur comptable propre — jamais pour écarter un montant réel "
+        "dont on ne sait juste pas où l'imputer (ça, c'est le rôle du compte d'écart, page Réglages)."
     )
+    edited_paiement_ignores_df = st.data_editor(
+        _as_editable_df(
+            mappings.get("modes_paiement_ignores", []), ["mode_paiement", "commentaires"], tri="mode_paiement"
+        ),
+        num_rows="dynamic",
+        use_container_width=True,
+        key="editor_paiement_ignores",
+        column_config={
+            "mode_paiement": st.column_config.TextColumn(
+                "Mode de paiement à ignorer", required=True, help="Intitulé exact tel qu'il apparaît dans l'export LightSpeed."
+            ),
+            "commentaires": st.column_config.TextColumn("Commentaires", help="Pourquoi cette ligne est ignorée."),
+        },
+    )
+    edited_paiement_ignores = edited_paiement_ignores_df.dropna(how="all").fillna("").to_dict("records")
+
+with tab_tva:
+    st.markdown("Compte de **TVA collectée** à utiliser pour chaque taux de TVA rencontré dans les ventes.")
+    edited_tva_df = st.data_editor(
+        _as_editable_df(
+            mappings.get("comptes_tva", []), ["taux", "compte", "libelle_compte", "commentaires"], tri="taux"
+        ),
+        num_rows="dynamic",
+        use_container_width=True,
+        key="editor_tva",
+        column_config={
+            "taux": st.column_config.SelectboxColumn(
+                "Taux de TVA", options=["0%", "5.5%", "10%", "20%"], required=True
+            ),
+            "compte": st.column_config.TextColumn("Compte de TVA collectée", required=True),
+            "libelle_compte": st.column_config.TextColumn("Libellé du compte"),
+            "commentaires": st.column_config.TextColumn("Commentaires"),
+        },
+    )
+    edited_tva = edited_tva_df.dropna(how="all").fillna("").to_dict("records")
 
 with tab_attribution:
     st.markdown(
         "Pour un **compte comptable**, un **point de vente** et un **département LightSpeed** donnés, "
-        "quel **code analytique** (choisi dans l'onglet précédent) appliquer. C'est cette table qui "
-        "« rejoue » l'analytique que LightSpeed ne fournit pas — les trois critères sont nécessaires : "
-        "un même compte peut porter un code analytique différent selon le département, même sur un "
-        "seul et même point de vente (ex. un compte de boisson peut être « Sommellerie » ou « Bar » "
-        "selon le département d'origine). Toute combinaison rencontrée à la conversion et absente "
-        "d'ici bloquera l'export.\n\n"
+        "quel **code analytique** (choisi dans l'onglet « Codes Analytique PL ») appliquer. C'est cette "
+        "table qui « rejoue » l'analytique que LightSpeed ne fournit pas — les trois critères sont "
+        "nécessaires : un même compte peut porter un code analytique différent selon le département, "
+        "même sur un seul et même point de vente (ex. un compte de boisson peut être « Sommellerie » "
+        "ou « Bar » selon le département d'origine). Toute combinaison rencontrée à la conversion et "
+        "absente d'ici bloquera l'export.\n\n"
         "⚠️ Cette table part de l'hypothèse que la combinaison (compte, point de vente, département) "
         "suffit à déterminer le code analytique dans tous les cas — à valider avec un exemple réel : "
         "si certains cas s'avèrent plus dynamiques (règle non réductible à cette combinaison), cette "
@@ -279,7 +349,7 @@ with tab_attribution:
     ]
     pdv_options = [p["code"] for p in mappings.get("points_de_vente", [])]
     if not codes_analytiques_options:
-        st.warning("Ajoutez d'abord des codes dans l'onglet « Codes analytiques » pour pouvoir les choisir ici.")
+        st.warning("Ajoutez d'abord des codes dans l'onglet « Codes Analytique PL » pour pouvoir les choisir ici.")
 
     # --- Tableau des groupes (1 ligne = 1 attribution), sélectionnable -----------------
     groupes: dict[tuple[str, str, str, str], list[str]] = {}
@@ -313,7 +383,7 @@ with tab_attribution:
     st.markdown("#### Attributions existantes")
     st.caption(
         "Clique sur une ligne pour la modifier ou la supprimer dans le formulaire ci-dessous. "
-        "⚠️ devant un département = introuvable dans « Départements LightSpeed », probable faute de frappe."
+        "⚠️ devant un département = introuvable dans « Départements LS », probable faute de frappe."
     )
     if groupes_df.empty:
         st.info("Aucune attribution enregistrée pour l'instant.")
@@ -448,79 +518,9 @@ with tab_attribution:
             st.success(f"Attribution enregistrée ({len(f_departements)} département(s)).")
             st.rerun()
 
-with tab_paiement:
-    st.markdown(
-        "Correspondance entre chaque **mode de paiement LightSpeed** (Carte bleue, Espèces, "
-        "Deliveroo, UberEats...) et son **compte de contrepartie** (banque, caisse, créance "
-        "plateforme) dans Pennylane. Un mode de paiement non mappé bloque également l'export "
-        "(l'écriture serait déséquilibrée)."
-    )
-    edited_paiement_df = st.data_editor(
-        _as_editable_df(
-            mappings.get("comptes_paiement", []),
-            ["mode_paiement", "compte", "libelle_compte", "commentaires"],
-            tri="mode_paiement",
-        ),
-        num_rows="dynamic",
-        use_container_width=True,
-        key="editor_paiement",
-        column_config={
-            "mode_paiement": st.column_config.TextColumn("Mode de paiement LightSpeed", required=True),
-            "compte": st.column_config.TextColumn("Compte de contrepartie", required=True),
-            "libelle_compte": st.column_config.TextColumn("Libellé du compte"),
-            "commentaires": st.column_config.TextColumn("Commentaires"),
-        },
-    )
-    edited_paiement = edited_paiement_df.dropna(how="all").fillna("").to_dict("records")
-
-with tab_paiement_ignores:
-    st.markdown(
-        "Intitulés de **mode de paiement** (bloc « Modes de paiement » de l'export LightSpeed "
-        "uniquement) à **exclure totalement** de l'écriture générée : aucune ligne de débit/crédit "
-        "n'est créée pour eux, contrairement à un mode non mappé dans l'onglet précédent qui bloque "
-        "l'export. Correspondance **exacte** (insensible à la casse et aux espaces superflus). "
-        "⚠️ À réserver aux lignes sans valeur comptable propre — jamais pour écarter un montant réel "
-        "dont on ne sait juste pas où l'imputer (ça, c'est le rôle du compte d'écart, page Réglages)."
-    )
-    edited_paiement_ignores_df = st.data_editor(
-        _as_editable_df(
-            mappings.get("modes_paiement_ignores", []), ["mode_paiement", "commentaires"], tri="mode_paiement"
-        ),
-        num_rows="dynamic",
-        use_container_width=True,
-        key="editor_paiement_ignores",
-        column_config={
-            "mode_paiement": st.column_config.TextColumn(
-                "Mode de paiement à ignorer", required=True, help="Intitulé exact tel qu'il apparaît dans l'export LightSpeed."
-            ),
-            "commentaires": st.column_config.TextColumn("Commentaires", help="Pourquoi cette ligne est ignorée."),
-        },
-    )
-    edited_paiement_ignores = edited_paiement_ignores_df.dropna(how="all").fillna("").to_dict("records")
-
-with tab_tva:
-    st.markdown("Compte de **TVA collectée** à utiliser pour chaque taux de TVA rencontré dans les ventes.")
-    edited_tva_df = st.data_editor(
-        _as_editable_df(
-            mappings.get("comptes_tva", []), ["taux", "compte", "libelle_compte", "commentaires"], tri="taux"
-        ),
-        num_rows="dynamic",
-        use_container_width=True,
-        key="editor_tva",
-        column_config={
-            "taux": st.column_config.SelectboxColumn(
-                "Taux de TVA", options=["0%", "5.5%", "10%", "20%"], required=True
-            ),
-            "compte": st.column_config.TextColumn("Compte de TVA collectée", required=True),
-            "libelle_compte": st.column_config.TextColumn("Libellé du compte"),
-            "commentaires": st.column_config.TextColumn("Commentaires"),
-        },
-    )
-    edited_tva = edited_tva_df.dropna(how="all").fillna("").to_dict("records")
-
 st.divider()
 b1, b2, _ = st.columns([1, 1, 4])
-if b1.button("💾 Enregistrer les tables de correspondance", type="primary"):
+if b1.button("💾 Enregistrer", type="primary"):
     save_mappings(
         client_id,
         {
