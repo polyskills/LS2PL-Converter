@@ -60,6 +60,11 @@ EMPTY_MAPPINGS = {
     "comptes_analytiques": [],
     "comptes_paiement": [],
     "comptes_tva": [],
+    # Indicateur interne (jamais affiché/édité) : marque qu'un client a déjà
+    # reçu son référentiel de départ une fois - cf. core.bootstrap. Empêche
+    # de réappliquer le seed à chaque interaction et de ressusciter des lignes
+    # que l'utilisateur a délibérément supprimées.
+    "_referentiel_initial_applique": False,
 }
 
 # Jeu d'exemple proposé à la création d'un client (repris de la logique du

@@ -12,6 +12,17 @@ d'écrasement d'une personnalisation existante), les données qui doivent
 survivre à un redémarrage. Toute donnée saisie ensuite dans l'interface
 (comptes, codes analytiques...) reste, elle, soumise à la persistance
 disque habituelle.
+
+IMPORTANT : ensure_defaults() est appelé à CHAQUE rendu de page (via
+core.ui_common.select_client()), pas seulement au démarrage du process -
+Streamlit réexécute le script à chaque interaction. Le seed du référentiel
+de départ (comptes, départements, modes de paiement...) ne doit donc
+s'appliquer qu'UNE SEULE fois par client, sans quoi une ligne supprimée
+volontairement par l'utilisateur et enregistrée réapparaîtrait au rechargement
+suivant (bug constaté sur "Contreparties de paiement" - le seed la
+recréait juste après suppression, faute de ce garde-fou). C'est le rôle du
+drapeau "_referentiel_initial_applique" persisté dans mappings.json : le
+seed ne tourne que si ce drapeau est absent/faux, puis le pose à vrai.
 """
 from __future__ import annotations
 
@@ -23,6 +34,8 @@ from core.mapping_store import (
     ensure_comptes_tva,
     ensure_departements,
     ensure_points_de_vente,
+    load_mappings,
+    save_mappings,
     set_pdv_adresse_email,
 )
 
@@ -139,11 +152,26 @@ DEFAULT_COMPTES_TVA = {
 def ensure_defaults() -> None:
     for c in DEFAULT_CLIENTS:
         ensure_client(c["id"], c["nom"])
-        ensure_points_de_vente(c["id"], DEFAULT_POINTS_DE_VENTE)
-        for code_pdv, adresse in DEFAULT_ADRESSES_EMAIL.get(c["id"], {}).items():
-            set_pdv_adresse_email(c["id"], code_pdv, adresse)
-        ensure_comptes_de_vente(c["id"], DEFAULT_COMPTES_DE_VENTE.get(c["id"], []))
-        ensure_departements(c["id"], DEFAULT_DEPARTEMENTS.get(c["id"], []))
-        ensure_codes_analytiques(c["id"], DEFAULT_CODES_ANALYTIQUES.get(c["id"], []))
-        ensure_comptes_paiement(c["id"], DEFAULT_COMPTES_PAIEMENT.get(c["id"], []))
-        ensure_comptes_tva(c["id"], DEFAULT_COMPTES_TVA.get(c["id"], []))
+        _ensure_referentiel_initial(c["id"])
+
+
+def _ensure_referentiel_initial(client_id: str) -> None:
+    """Seed le référentiel de départ de ce client, mais une seule fois pour
+    de bon (cf. le drapeau "_referentiel_initial_applique") : les appels
+    suivants (à chaque rendu de page) ne font plus rien, pour ne jamais
+    annuler une suppression/modification faite depuis l'interface."""
+    if load_mappings(client_id).get("_referentiel_initial_applique"):
+        return
+
+    ensure_points_de_vente(client_id, DEFAULT_POINTS_DE_VENTE)
+    for code_pdv, adresse in DEFAULT_ADRESSES_EMAIL.get(client_id, {}).items():
+        set_pdv_adresse_email(client_id, code_pdv, adresse)
+    ensure_comptes_de_vente(client_id, DEFAULT_COMPTES_DE_VENTE.get(client_id, []))
+    ensure_departements(client_id, DEFAULT_DEPARTEMENTS.get(client_id, []))
+    ensure_codes_analytiques(client_id, DEFAULT_CODES_ANALYTIQUES.get(client_id, []))
+    ensure_comptes_paiement(client_id, DEFAULT_COMPTES_PAIEMENT.get(client_id, []))
+    ensure_comptes_tva(client_id, DEFAULT_COMPTES_TVA.get(client_id, []))
+
+    mappings = load_mappings(client_id)
+    mappings["_referentiel_initial_applique"] = True
+    save_mappings(client_id, mappings)

@@ -97,3 +97,26 @@ def test_ensure_defaults_is_idempotent_and_preserves_customizations():
     departements_apres = [d["categorie_lightspeed"] for d in mappings_apres["departements"]]
     assert departements_apres.count("Test") == 1  # ni dupliquée
     assert len(mappings_apres["departements"]) == len(DEFAULT_DEPARTEMENTS["paris"]) + 1  # ni écrasée
+
+
+def test_ensure_defaults_does_not_resurrect_deleted_default_rows():
+    """Bug constaté : une ligne du référentiel de départ (ex. un mode de
+    paiement) supprimée puis enregistrée depuis l'interface réapparaissait au
+    rechargement suivant, car ensure_defaults() est rejoué à chaque rendu de
+    page (pas seulement au démarrage) et ne distinguait pas "jamais existé"
+    de "supprimée volontairement". Le seed ne doit s'appliquer qu'une fois."""
+    ensure_defaults()
+
+    mappings = load_mappings("paris")
+    avant = len(mappings["comptes_paiement"])
+    assert avant == len(DEFAULT_COMPTES_PAIEMENT["paris"])
+
+    # L'utilisateur supprime tous les modes de paiement pré-remplis et enregistre.
+    mappings["comptes_paiement"] = []
+    save_mappings("paris", mappings)
+
+    # Rechargements successifs de la page (chacun rejoue ensure_defaults()).
+    ensure_defaults()
+    ensure_defaults()
+
+    assert load_mappings("paris")["comptes_paiement"] == []
