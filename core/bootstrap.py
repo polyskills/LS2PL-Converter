@@ -122,12 +122,18 @@ DEFAULT_DEPARTEMENTS = {
 # renseigner séparément une fois les comptes de vente choisis.
 DEFAULT_CODES_ANALYTIQUES = {
     "paris": [
-        {"code_analytique": "REST", "description": "RESTAURANT"},
-        {"code_analytique": "SOM", "description": "SOMMELLERIE"},
-        {"code_analytique": "BARF", "description": "BAR FOOD"},
-        {"code_analytique": "BARS", "description": "BAR SOMMELLERIE"},
-        {"code_analytique": "ADD", "description": "VENTES ADDITIONNELLES"},
-        {"code_analytique": "PARIS", "description": "PARIS 2.0"},
+        {"code_analytique": "ASPP - Alcools & Cocktails alcoolisés", "description": "ASPP - Alcools & Cocktails alcoolisés"},
+        {"code_analytique": "ASPP -  Boissons sans alcools", "description": "ASPP -  Boissons sans alcools"},
+        {"code_analytique": "ASPP - FOOD", "description": "ASPP - FOOD"},
+        {"code_analytique": "ASPP - Vins & Champagnes", "description": "ASPP - Vins & Champagnes"},
+        {"code_analytique": "UTOPIC - Alcools & Cocktails alcoolisés", "description": "UTOPIC - Alcools & Cocktails alcoolisés"},
+        {"code_analytique": "UTOPIC - Boissons sans alcools", "description": "UTOPIC - Boissons sans alcools"},
+        {"code_analytique": "UTOPIC - FOOD", "description": "UTOPIC - FOOD"},
+        {"code_analytique": "UTOPIC - Vins & Champagnes", "description": "UTOPIC - Vins & Champagnes"},
+        {"code_analytique": "VENTES ADDITIONNELLES", "description": "VENTES ADDITIONNELLES"},
+        {"code_analytique": "ESSAIS", "description": "ESSAIS"},
+        {"code_analytique": "PARIS 2.0", "description": "PARIS 2.0"},
+        {"code_analytique": "STAFF", "description": "STAFF"},
     ],
 }
 
