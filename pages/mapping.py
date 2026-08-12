@@ -186,35 +186,51 @@ with tab_departements:
     )
     if not comptes_options:
         st.warning("Ajoutez d'abord des comptes dans l'onglet « Comptes de vente » pour pouvoir les choisir ici.")
+    # Départements réellement affectés à au moins une ligne d'attribution analytique, tous
+    # points de vente/comptes confondus - purement informatif, calculé à la volée (jamais
+    # enregistré), pour repérer d'un coup d'œil un département encore orphelin.
+    departements_affectes = {
+        (a.get("categorie_lightspeed") or "").strip().casefold()
+        for a in mappings.get("comptes_analytiques", [])
+        if a.get("categorie_lightspeed")
+    }
     departements_source = [
         {
             **d,
             "compte": _affichage_depuis_code(
                 d.get("compte", ""), mappings.get("comptes_de_vente", []), "compte", "libelle_compte"
             ),
+            "affecte": "✅" if (d.get("categorie_lightspeed") or "").strip().casefold() in departements_affectes else "⚠️ aucune attribution",
         }
         for d in mappings.get("departements", [])
     ]
     edited_departements_df = st.data_editor(
         _as_editable_df(
             departements_source,
-            ["categorie_lightspeed", "compte", "taux_tva", "commentaires"],
+            ["categorie_lightspeed", "compte", "taux_tva", "affecte", "commentaires"],
             tri="categorie_lightspeed",
         ),
         num_rows="dynamic",
         use_container_width=True,
         key="editor_departements",
+        disabled=["affecte"],
         column_config={
             "categorie_lightspeed": st.column_config.TextColumn("Département LightSpeed", required=True),
             "compte": st.column_config.SelectboxColumn("Compte de vente", options=comptes_options),
             "taux_tva": st.column_config.SelectboxColumn(
                 "Taux TVA nominal (informatif)", options=["0%", "5.5%", "10%", "20%"]
             ),
+            "affecte": st.column_config.TextColumn(
+                "Attribution analytique",
+                help="Ce département apparaît-il dans au moins une ligne de l'onglet « Attribution "
+                "analytique » (tous points de vente/comptes confondus) ? Colonne informative, non enregistrée.",
+            ),
             "commentaires": st.column_config.TextColumn("Commentaires"),
         },
     )
     edited_departements = [
-        {**d, "compte": _code_depuis_affichage(d.get("compte", ""))}
+        {"categorie_lightspeed": d.get("categorie_lightspeed", ""), "compte": _code_depuis_affichage(d.get("compte", "")),
+         "taux_tva": d.get("taux_tva", ""), "commentaires": d.get("commentaires", "")}
         for d in edited_departements_df.dropna(how="all").fillna("").to_dict("records")
     ]
 
@@ -329,42 +345,77 @@ with tab_attribution:
                 st.success(f"{nb_crees} ligne(s) créée(s), {nb_maj} mise(s) à jour.")
                 st.rerun()
 
-    attribution_source = [
-        {
-            **a,
-            "compte": _affichage_depuis_code(
-                a.get("compte", ""), mappings.get("comptes_de_vente", []), "compte", "libelle_compte"
-            ),
-            "code_analytique": _affichage_depuis_code(
-                a.get("code_analytique", ""), mappings.get("codes_analytiques", []), "code_analytique", "description"
-            ),
-        }
-        for a in mappings.get("comptes_analytiques", [])
-    ]
-    edited_attribution_df = st.data_editor(
-        _as_editable_df(
-            attribution_source,
-            ["compte", "point_de_vente", "categorie_lightspeed", "famille", "code_analytique", "commentaires"],
-            tri=["point_de_vente", "categorie_lightspeed", "compte"],
-        ),
-        num_rows="dynamic",
-        use_container_width=True,
-        key="editor_attribution",
-        column_config={
-            "compte": st.column_config.SelectboxColumn("Compte comptable", options=comptes_options, required=True),
-            "point_de_vente": st.column_config.SelectboxColumn(
-                "Point de vente", options=pdv_options, required=True
-            ),
-            "categorie_lightspeed": st.column_config.SelectboxColumn(
-                "Département LightSpeed", options=departements_options, required=True
-            ),
-            "famille": st.column_config.TextColumn("Famille analytique", required=True),
-            "code_analytique": st.column_config.SelectboxColumn(
-                "Code analytique", options=codes_analytiques_options, required=True
-            ),
-            "commentaires": st.column_config.TextColumn("Commentaires"),
-        },
+    st.markdown("#### Vue groupée")
+    st.caption(
+        "Une carte par attribution (point de vente × compte × code analytique), avec tous ses "
+        "départements empilés verticalement — pour repérer d'un coup d'œil un doublon ou une "
+        "faute de frappe (⚠️, département introuvable dans « Départements LightSpeed »). Pour "
+        "les départements jamais attribués nulle part, voir la colonne « Attribution analytique » "
+        "de l'onglet « Départements LightSpeed »."
     )
+    groupes: dict[tuple[str, str, str, str], list[str]] = {}
+    for a in mappings.get("comptes_analytiques", []):
+        cle = (a.get("point_de_vente", ""), a.get("compte", ""), a.get("code_analytique", ""), a.get("famille", ""))
+        groupes.setdefault(cle, []).append(a.get("categorie_lightspeed", ""))
+
+    if not groupes:
+        st.info("Aucune attribution enregistrée pour l'instant.")
+    else:
+        departements_connus = {d.strip().casefold() for d in departements_options}
+        for (pdv, compte, code, famille), deps in sorted(groupes.items()):
+            compte_affiche = _affichage_depuis_code(
+                compte, mappings.get("comptes_de_vente", []), "compte", "libelle_compte"
+            )
+            code_affiche = _affichage_depuis_code(
+                code, mappings.get("codes_analytiques", []), "code_analytique", "description"
+            )
+            with st.container(border=True):
+                st.markdown(f"**{pdv or '—'}** · {compte_affiche or '—'} → **{code_affiche or '—'}** *(famille : {famille or '—'})*")
+                lignes_dep = []
+                for d in sorted(deps, key=str.casefold):
+                    if d.strip().casefold() not in departements_connus:
+                        lignes_dep.append(f"- ⚠️ {d} *(introuvable dans « Départements LightSpeed » — faute de frappe ?)*")
+                    else:
+                        lignes_dep.append(f"- {d}")
+                st.markdown("\n".join(lignes_dep))
+
+    with st.expander("🔧 Voir/éditer le détail ligne par ligne"):
+        attribution_source = [
+            {
+                **a,
+                "compte": _affichage_depuis_code(
+                    a.get("compte", ""), mappings.get("comptes_de_vente", []), "compte", "libelle_compte"
+                ),
+                "code_analytique": _affichage_depuis_code(
+                    a.get("code_analytique", ""), mappings.get("codes_analytiques", []), "code_analytique", "description"
+                ),
+            }
+            for a in mappings.get("comptes_analytiques", [])
+        ]
+        edited_attribution_df = st.data_editor(
+            _as_editable_df(
+                attribution_source,
+                ["compte", "point_de_vente", "categorie_lightspeed", "famille", "code_analytique", "commentaires"],
+                tri=["point_de_vente", "categorie_lightspeed", "compte"],
+            ),
+            num_rows="dynamic",
+            use_container_width=True,
+            key="editor_attribution",
+            column_config={
+                "compte": st.column_config.SelectboxColumn("Compte comptable", options=comptes_options, required=True),
+                "point_de_vente": st.column_config.SelectboxColumn(
+                    "Point de vente", options=pdv_options, required=True
+                ),
+                "categorie_lightspeed": st.column_config.SelectboxColumn(
+                    "Département LightSpeed", options=departements_options, required=True
+                ),
+                "famille": st.column_config.TextColumn("Famille analytique", required=True),
+                "code_analytique": st.column_config.SelectboxColumn(
+                    "Code analytique", options=codes_analytiques_options, required=True
+                ),
+                "commentaires": st.column_config.TextColumn("Commentaires"),
+            },
+        )
     edited_attribution = [
         {
             **a,
