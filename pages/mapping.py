@@ -7,13 +7,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from core.mapping_store import (
-    find_code_analytique,
-    load_mappings,
-    reset_to_empty,
-    save_mappings,
-    seed_with_examples,
-)
+from core.mapping_store import load_mappings, reset_to_empty, save_mappings, seed_with_examples
 from core.ui_common import select_client
 
 
@@ -274,7 +268,10 @@ with tab_attribution:
         "⚠️ Cette table part de l'hypothèse que la combinaison (compte, point de vente, département) "
         "suffit à déterminer le code analytique dans tous les cas — à valider avec un exemple réel : "
         "si certains cas s'avèrent plus dynamiques (règle non réductible à cette combinaison), cette "
-        "table ne sera pas suffisante et il faudra revoir l'approche."
+        "table ne sera pas suffisante et il faudra revoir l'approche.\n\n"
+        "**Aucun bouton « Enregistrer » ici** : chaque action (créer, modifier, supprimer) écrit "
+        "directement dans le référentiel, indépendamment du bouton tout en bas de page (qui ne "
+        "concerne que les autres onglets)."
     )
     # Même choix que pour comptes_options : basé sur l'état enregistré, pas le live des autres onglets.
     departements_options = [
@@ -284,146 +281,173 @@ with tab_attribution:
     if not codes_analytiques_options:
         st.warning("Ajoutez d'abord des codes dans l'onglet « Codes analytiques » pour pouvoir les choisir ici.")
 
-    with st.expander("➕ Attribution groupée (plusieurs départements en une fois)"):
-        st.caption(
-            "Applique le même compte, la même famille et le même code analytique à plusieurs "
-            "départements d'un coup, pour un point de vente donné — évite de créer une ligne par "
-            "département à la main. Écrit directement dans le référentiel (indépendant du bouton "
-            "« Enregistrer » tout en bas, qui ne concerne que les modifications faites dans la grille)."
-        )
-        with st.form("form_attribution_groupee", clear_on_submit=True):
-            gc1, gc2 = st.columns(2)
-            g_compte_affiche = gc1.selectbox(
-                "Compte comptable", options=comptes_options, index=None, placeholder="Choisir un compte"
-            )
-            g_pdv = gc2.selectbox(
-                "Point de vente", options=pdv_options, index=None, placeholder="Choisir un point de vente"
-            )
-            g_departements = st.multiselect("Départements LightSpeed (un ou plusieurs)", options=departements_options)
-            gc3, gc4 = st.columns(2)
-            g_code_affiche = gc3.selectbox(
-                "Code analytique", options=codes_analytiques_options, index=None, placeholder="Choisir un code"
-            )
-            g_famille = gc4.text_input(
-                "Famille analytique",
-                value=mappings.get("parametres", {}).get("famille_categorie_analytique", "POINT_DE_VENTE"),
-            )
-            g_commentaires = st.text_input("Commentaires (optionnel)")
-            submit_groupe = st.form_submit_button("Appliquer aux départements sélectionnés", type="primary")
-
-        if submit_groupe:
-            if not (g_compte_affiche and g_pdv and g_departements and g_code_affiche):
-                st.error("Compte, point de vente, au moins un département et code analytique sont obligatoires.")
-            else:
-                g_compte = _code_depuis_affichage(g_compte_affiche)
-                g_code = _code_depuis_affichage(g_code_affiche)
-                mappings_actuels = load_mappings(client_id)
-                lignes = mappings_actuels.setdefault("comptes_analytiques", [])
-                nb_crees, nb_maj = 0, 0
-                for dep in g_departements:
-                    existante = find_code_analytique(mappings_actuels, g_compte, g_pdv, dep)
-                    if existante is not None:
-                        existante["famille"] = g_famille
-                        existante["code_analytique"] = g_code
-                        if g_commentaires:
-                            existante["commentaires"] = g_commentaires
-                        nb_maj += 1
-                    else:
-                        lignes.append(
-                            {
-                                "compte": g_compte,
-                                "point_de_vente": g_pdv,
-                                "categorie_lightspeed": dep,
-                                "famille": g_famille,
-                                "code_analytique": g_code,
-                                "commentaires": g_commentaires,
-                            }
-                        )
-                        nb_crees += 1
-                save_mappings(client_id, mappings_actuels)
-                st.session_state.pop("resultats", None)
-                st.success(f"{nb_crees} ligne(s) créée(s), {nb_maj} mise(s) à jour.")
-                st.rerun()
-
-    st.markdown("#### Vue groupée")
-    st.caption(
-        "Une carte par attribution (point de vente × compte × code analytique), avec tous ses "
-        "départements empilés verticalement — pour repérer d'un coup d'œil un doublon ou une "
-        "faute de frappe (⚠️, département introuvable dans « Départements LightSpeed »). Pour "
-        "les départements jamais attribués nulle part, voir la colonne « Attribution analytique » "
-        "de l'onglet « Départements LightSpeed »."
-    )
+    # --- Tableau des groupes (1 ligne = 1 attribution), sélectionnable -----------------
     groupes: dict[tuple[str, str, str, str], list[str]] = {}
     for a in mappings.get("comptes_analytiques", []):
         cle = (a.get("point_de_vente", ""), a.get("compte", ""), a.get("code_analytique", ""), a.get("famille", ""))
         groupes.setdefault(cle, []).append(a.get("categorie_lightspeed", ""))
+    groupes_keys = sorted(groupes.keys())
+    departements_connus = {d.strip().casefold() for d in departements_options}
 
-    if not groupes:
-        st.info("Aucune attribution enregistrée pour l'instant.")
-    else:
-        departements_connus = {d.strip().casefold() for d in departements_options}
-        for (pdv, compte, code, famille), deps in sorted(groupes.items()):
-            compte_affiche = _affichage_depuis_code(
-                compte, mappings.get("comptes_de_vente", []), "compte", "libelle_compte"
-            )
-            code_affiche = _affichage_depuis_code(
-                code, mappings.get("codes_analytiques", []), "code_analytique", "description"
-            )
-            with st.container(border=True):
-                st.markdown(f"**{pdv or '—'}** · {compte_affiche or '—'} → **{code_affiche or '—'}** *(famille : {famille or '—'})*")
-                lignes_dep = []
-                for d in sorted(deps, key=str.casefold):
-                    if d.strip().casefold() not in departements_connus:
-                        lignes_dep.append(f"- ⚠️ {d} *(introuvable dans « Départements LightSpeed » — faute de frappe ?)*")
-                    else:
-                        lignes_dep.append(f"- {d}")
-                st.markdown("\n".join(lignes_dep))
+    def _departements_affiches(deps: list[str]) -> str:
+        parties = []
+        for d in sorted(deps, key=str.casefold):
+            parties.append(f"⚠️ {d}" if d.strip().casefold() not in departements_connus else d)
+        return ", ".join(parties)
 
-    with st.expander("🔧 Voir/éditer le détail ligne par ligne"):
-        attribution_source = [
+    groupes_df = pd.DataFrame(
+        [
             {
-                **a,
-                "compte": _affichage_depuis_code(
-                    a.get("compte", ""), mappings.get("comptes_de_vente", []), "compte", "libelle_compte"
+                "Point de vente": pdv,
+                "Compte": _affichage_depuis_code(compte, mappings.get("comptes_de_vente", []), "compte", "libelle_compte"),
+                "Code analytique": _affichage_depuis_code(
+                    code, mappings.get("codes_analytiques", []), "code_analytique", "description"
                 ),
-                "code_analytique": _affichage_depuis_code(
-                    a.get("code_analytique", ""), mappings.get("codes_analytiques", []), "code_analytique", "description"
-                ),
+                "Famille": famille,
+                "Départements": _departements_affiches(groupes[(pdv, compte, code, famille)]),
             }
-            for a in mappings.get("comptes_analytiques", [])
+            for (pdv, compte, code, famille) in groupes_keys
         ]
-        edited_attribution_df = st.data_editor(
-            _as_editable_df(
-                attribution_source,
-                ["compte", "point_de_vente", "categorie_lightspeed", "famille", "code_analytique", "commentaires"],
-                tri=["point_de_vente", "categorie_lightspeed", "compte"],
-            ),
-            num_rows="dynamic",
+    )
+
+    # Streamlit interdit de modifier st.session_state["table_groupes_attribution"] une fois le
+    # widget instancié dans le MÊME run (StreamlitAPIException) : la désélection après
+    # enregistrement/suppression passe donc par un indicateur intermédiaire, consommé ici,
+    # AVANT que le tableau ci-dessous ne soit créé.
+    if st.session_state.pop("_reset_selection_attribution", False):
+        st.session_state["table_groupes_attribution"] = {"selection": {"rows": [], "columns": [], "cells": []}}
+
+    st.markdown("#### Attributions existantes")
+    st.caption(
+        "Clique sur une ligne pour la modifier ou la supprimer dans le formulaire ci-dessous. "
+        "⚠️ devant un département = introuvable dans « Départements LightSpeed », probable faute de frappe."
+    )
+    if groupes_df.empty:
+        st.info("Aucune attribution enregistrée pour l'instant.")
+        selection_event = None
+    else:
+        selection_event = st.dataframe(
+            groupes_df,
+            hide_index=True,
             use_container_width=True,
-            key="editor_attribution",
-            column_config={
-                "compte": st.column_config.SelectboxColumn("Compte comptable", options=comptes_options, required=True),
-                "point_de_vente": st.column_config.SelectboxColumn(
-                    "Point de vente", options=pdv_options, required=True
-                ),
-                "categorie_lightspeed": st.column_config.SelectboxColumn(
-                    "Département LightSpeed", options=departements_options, required=True
-                ),
-                "famille": st.column_config.TextColumn("Famille analytique", required=True),
-                "code_analytique": st.column_config.SelectboxColumn(
-                    "Code analytique", options=codes_analytiques_options, required=True
-                ),
-                "commentaires": st.column_config.TextColumn("Commentaires"),
-            },
+            on_select="rerun",
+            selection_mode="single-row",
+            key="table_groupes_attribution",
         )
-    edited_attribution = [
-        {
-            **a,
-            "compte": _code_depuis_affichage(a.get("compte", "")),
-            "code_analytique": _code_depuis_affichage(a.get("code_analytique", "")),
-        }
-        for a in edited_attribution_df.dropna(how="all").fillna("").to_dict("records")
-    ]
+
+    selected_idx = None
+    if selection_event is not None and selection_event["selection"]["rows"]:
+        selected_idx = selection_event["selection"]["rows"][0]
+    selected_key = groupes_keys[selected_idx] if selected_idx is not None else None
+    selected_departements = sorted(groupes[selected_key], key=str.casefold) if selected_key else []
+
+    # --- Formulaire unique : édite la ligne sélectionnée, ou en crée une nouvelle ------
+    st.markdown(f"#### {'Modifier l’attribution sélectionnée' if selected_key else 'Nouvelle attribution'}")
+    if selected_key and any(d.strip().casefold() not in departements_connus for d in selected_departements):
+        st.caption(
+            "⚠️ Un département introuvable dans le référentiel ne peut pas être présélectionné ici : "
+            "s'il n'est pas r'ajouté manuellement dans la liste ci-dessous, il sera retiré à l'enregistrement."
+        )
+
+    def _index_ou_none(valeur_code: str, options: list[str]) -> int | None:
+        for i, o in enumerate(options):
+            if _code_depuis_affichage(o) == valeur_code:
+                return i
+        return None
+
+    with st.form("form_attribution", clear_on_submit=False):
+        fc1, fc2 = st.columns(2)
+        f_compte_affiche = fc1.selectbox(
+            "Compte comptable",
+            options=comptes_options,
+            index=_index_ou_none(selected_key[1], comptes_options) if selected_key else None,
+            placeholder="Choisir un compte",
+        )
+        f_pdv = fc2.selectbox(
+            "Point de vente",
+            options=pdv_options,
+            index=pdv_options.index(selected_key[0]) if selected_key and selected_key[0] in pdv_options else None,
+            placeholder="Choisir un point de vente",
+        )
+        f_departements = st.multiselect(
+            "Départements LightSpeed (un ou plusieurs)",
+            options=departements_options,
+            default=[d for d in selected_departements if d in departements_options],
+        )
+        fc3, fc4 = st.columns(2)
+        f_code_affiche = fc3.selectbox(
+            "Code analytique",
+            options=codes_analytiques_options,
+            index=_index_ou_none(selected_key[2], codes_analytiques_options) if selected_key else None,
+            placeholder="Choisir un code",
+        )
+        f_famille = fc4.text_input(
+            "Famille analytique",
+            value=selected_key[3] if selected_key else mappings.get("parametres", {}).get(
+                "famille_categorie_analytique", "POINT_DE_VENTE"
+            ),
+        )
+        fb1, fb2 = st.columns(2)
+        submit_save = fb1.form_submit_button(
+            "💾 Enregistrer les modifications" if selected_key else "➕ Créer l'attribution", type="primary"
+        )
+        submit_delete = fb2.form_submit_button("🗑️ Supprimer ce groupe", disabled=not selected_key)
+
+    def _appartient_au_groupe(ligne: dict, cle: tuple[str, str, str, str]) -> bool:
+        return (
+            ligne.get("point_de_vente") == cle[0]
+            and ligne.get("compte") == cle[1]
+            and ligne.get("code_analytique") == cle[2]
+            and ligne.get("famille") == cle[3]
+        )
+
+    if submit_delete and selected_key:
+        mappings_actuels = load_mappings(client_id)
+        lignes = mappings_actuels.get("comptes_analytiques", [])
+        lignes[:] = [l for l in lignes if not _appartient_au_groupe(l, selected_key)]
+        save_mappings(client_id, mappings_actuels)
+        st.session_state.pop("resultats", None)
+        st.session_state["_reset_selection_attribution"] = True
+        st.success("Attribution supprimée.")
+        st.rerun()
+
+    if submit_save:
+        if not (f_compte_affiche and f_pdv and f_departements and f_code_affiche):
+            st.error("Compte, point de vente, au moins un département et code analytique sont obligatoires.")
+        else:
+            f_compte = _code_depuis_affichage(f_compte_affiche)
+            f_code = _code_depuis_affichage(f_code_affiche)
+            mappings_actuels = load_mappings(client_id)
+            lignes = mappings_actuels.setdefault("comptes_analytiques", [])
+
+            # Commentaires existants à préserver pour les départements qui restent dans le groupe.
+            commentaires_existants = {}
+            if selected_key:
+                for l in lignes:
+                    if _appartient_au_groupe(l, selected_key):
+                        commentaires_existants[l.get("categorie_lightspeed")] = l.get("commentaires", "")
+                # Remplace entièrement l'ancien groupe : les départements retirés du formulaire
+                # ne sont pas recréés, ce qui les retire du groupe (y compris un intrus non
+                # présélectionnable, cf. avertissement ci-dessus).
+                lignes[:] = [l for l in lignes if not _appartient_au_groupe(l, selected_key)]
+
+            for dep in f_departements:
+                lignes.append(
+                    {
+                        "compte": f_compte,
+                        "point_de_vente": f_pdv,
+                        "categorie_lightspeed": dep,
+                        "famille": f_famille,
+                        "code_analytique": f_code,
+                        "commentaires": commentaires_existants.get(dep, ""),
+                    }
+                )
+
+            save_mappings(client_id, mappings_actuels)
+            st.session_state.pop("resultats", None)
+            st.session_state["_reset_selection_attribution"] = True
+            st.success(f"Attribution enregistrée ({len(f_departements)} département(s)).")
+            st.rerun()
 
 with tab_paiement:
     st.markdown(
@@ -506,7 +530,9 @@ if b1.button("💾 Enregistrer les tables de correspondance", type="primary"):
             "comptes_de_vente": edited_comptes,
             "departements": edited_departements,
             "codes_analytiques": edited_codes_analytiques,
-            "comptes_analytiques": edited_attribution,
+            # comptes_analytiques n'est pas listé ici : géré directement (créé/modifié/supprimé
+            # immédiatement) par le formulaire de l'onglet "Attribution analytique", pas par ce
+            # bouton - **mappings ci-dessus porte déjà sa valeur à jour.
             "comptes_paiement": edited_paiement,
             "modes_paiement_ignores": edited_paiement_ignores,
             "comptes_tva": edited_tva,
