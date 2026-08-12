@@ -6,10 +6,13 @@ mail, toujours propres au client sélectionné.
 """
 from __future__ import annotations
 
+import json
+
 import streamlit as st
 
 from core.client_store import get_client, set_email_config
 from core.mapping_store import load_mappings, save_mappings
+from core.timezone import now_local
 from core.ui_common import select_client
 
 client_id = select_client()
@@ -89,3 +92,89 @@ if st.button("💾 Enregistrer la config mail"):
     set_email_config(client_id, tenant_id, mailbox)
     st.success("Config mail enregistrée.")
     st.rerun()
+
+st.divider()
+st.subheader("💾 Sauvegarde du référentiel")
+st.caption(
+    "Exportez l'intégralité de la « Table de correspondance » de ce client (points de vente, "
+    "comptes, codes analytiques, attribution analytique, moyens de paiement, TVA, paramètres...) "
+    "dans un fichier de sauvegarde, et restaurez-la en cas de besoin (erreur de manipulation, "
+    "changement à tester, migration...)."
+)
+
+cs1, cs2 = st.columns(2)
+
+with cs1:
+    st.markdown("**Créer une sauvegarde**")
+    horodatage_export = now_local().strftime("%Y-%m-%d %H:%M:%S")
+    sauvegarde = {
+        "_meta": {
+            "client_id": client_id,
+            "client_nom": client["nom"],
+            "exporte_le": horodatage_export,
+        },
+        "mappings": mappings,
+    }
+    contenu_json = json.dumps(sauvegarde, ensure_ascii=False, indent=2)
+    nom_fichier = f"referentiel_{client_id}_{now_local().strftime('%Y%m%d_%H%M%S')}.json"
+    st.download_button(
+        "⬇️ Télécharger la sauvegarde (.json)",
+        data=contenu_json,
+        file_name=nom_fichier,
+        mime="application/json",
+        use_container_width=True,
+    )
+
+with cs2:
+    st.markdown("**Restaurer une sauvegarde**")
+    fichier_restauration = st.file_uploader(
+        "Fichier de sauvegarde (.json)",
+        type=["json"],
+        key="uploader_restauration_referentiel",
+    )
+
+    if fichier_restauration is not None:
+        try:
+            contenu = json.loads(fichier_restauration.getvalue().decode("utf-8"))
+        except Exception:
+            st.error("❌ Fichier illisible : ce n'est pas un fichier JSON valide.")
+            contenu = None
+
+        if contenu is not None:
+            mappings_a_restaurer = contenu.get("mappings")
+            meta = contenu.get("_meta", {})
+            if not isinstance(mappings_a_restaurer, dict):
+                st.error("❌ Fichier invalide : il ne s'agit pas d'une sauvegarde de référentiel reconnue.")
+            else:
+                if meta.get("client_id") and meta.get("client_id") != client_id:
+                    st.warning(
+                        f"⚠️ Cette sauvegarde provient d'un autre client "
+                        f"(« {meta.get('client_nom', meta.get('client_id'))} »). "
+                        f"La restaurer remplacera quand même le référentiel de « {client['nom']} »."
+                    )
+
+                st.caption(
+                    f"Sauvegarde exportée le {meta.get('exporte_le', '?')}" +
+                    (f" pour « {meta['client_nom']} »" if meta.get("client_nom") else "") + "."
+                )
+                recap = {
+                    "Points de vente": len(mappings_a_restaurer.get("points_de_vente", [])),
+                    "Comptes de vente": len(mappings_a_restaurer.get("comptes_de_vente", [])),
+                    "Départements": len(mappings_a_restaurer.get("departements", [])),
+                    "Codes analytiques": len(mappings_a_restaurer.get("codes_analytiques", [])),
+                    "Attribution analytique": len(mappings_a_restaurer.get("comptes_analytiques", [])),
+                    "Moyens de paiement": len(mappings_a_restaurer.get("comptes_paiement", [])),
+                    "Moyens de paiement ignorés": len(mappings_a_restaurer.get("modes_paiement_ignores", [])),
+                    "Taux de TVA": len(mappings_a_restaurer.get("comptes_tva", [])),
+                }
+                st.table(recap)
+
+                st.warning(
+                    f"⚠️ La restauration **écrasera définitivement** le référentiel actuel de « {client['nom']} » "
+                    "avec le contenu de cette sauvegarde. Cette action est irréversible."
+                )
+                if st.button("✅ Confirmer la restauration", type="primary"):
+                    mappings_a_restaurer["_referentiel_initial_applique"] = True
+                    save_mappings(client_id, mappings_a_restaurer)
+                    st.success("Référentiel restauré avec succès.")
+                    st.rerun()
