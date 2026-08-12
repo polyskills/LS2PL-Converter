@@ -73,9 +73,12 @@ def test_convert_balances_and_preserves_ca():
     assert res.equilibre_ok
     assert res.ca_ht_source == res.ca_ht_genere == 228.12
     assert res.total_debit == res.total_credit == 290.6
-    # Toutes les lignes de vente portent le code analytique REST
-    ventes = [l for l in res.lignes if l["Crédit"] and l["Code analytique"]]
-    assert all(l["Code analytique"] == "REST" for l in ventes)
+    # Le code analytique REST est porté par la colonne Catégorie (pas de
+    # colonne "Code analytique" dédiée dans le fichier Pennylane généré).
+    ventes = [l for l in res.lignes if l["Crédit"] and l["Catégorie"]]
+    assert ventes
+    assert all(l["Catégorie"] == "REST" for l in ventes)
+    assert "Code analytique" not in res.lignes[0]
 
 
 def test_code_pays_uniquement_sur_comptes_classe_6_ou_7():

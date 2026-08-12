@@ -23,7 +23,8 @@ def _format_value(val) -> str:
 
 def build_pennylane_csv(resultats: list[ConversionResult]) -> bytes:
     """Génère le fichier CSV destiné à l'import Pennylane (séparateur ';', UTF-8 avec BOM
-    pour une ouverture correcte dans Excel, mêmes 18 colonnes que le gabarit d'import avancé)."""
+    pour une ouverture correcte dans Excel, mêmes 17 colonnes que le gabarit d'import avancé -
+    « Code analytique » n'est volontairement pas exporté, cf. core.converter.PENNYLANE_COLUMNS)."""
     buf = io.StringIO()
     writer = csv.writer(buf, delimiter=";", lineterminator="\r\n")
     writer.writerow(PENNYLANE_COLUMNS)
@@ -57,7 +58,7 @@ def build_pennylane_workbook(resultats: list[ConversionResult]) -> bytes:
                     cell.number_format = "#,##0.00"
             row_idx += 1
 
-    widths = [10, 10, 14, 30, 26, 12, 10, 24, 14, 12, 10, 20, 14, 14, 10, 12, 12, 12]
+    widths = [10, 10, 14, 30, 26, 12, 10, 24, 14, 12, 10, 20, 14, 10, 12, 12, 12]
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(i)].width = w
     ws.freeze_panes = "A2"

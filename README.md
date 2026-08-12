@@ -36,8 +36,10 @@ produire la **famille** et le **code analytique** attendus par Pennylane.
    combinaison (compte, point de vente) non mappée bloque l'export** —
    aucune ligne n'est jamais ignorée silencieusement.
 5. **Export** (`core/pennylane_export.py`) : génération du fichier `.csv`
-   au format d'import avancé Pennylane (mêmes 18 colonnes que le modèle
-   officiel), téléchargeable depuis l'interface.
+   au format d'import avancé Pennylane (17 des 18 colonnes du modèle
+   officiel — « Code analytique » n'est volontairement pas exportée, le
+   code analytique est porté par la colonne « Catégorie » à la place, cf.
+   `core/converter.py`), téléchargeable depuis l'interface.
 6. **Historique** (`pages/historique.py`, menu « Gestion », `core/history_store.py`) :
    **chaque tentative de conversion est archivée**, réussie ou non — fichier
    source, fichier généré, statut (OK / AVERTISSEMENT / ERREUR), indicateurs
