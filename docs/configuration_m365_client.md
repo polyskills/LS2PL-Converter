@@ -60,7 +60,12 @@ Une fois créée, sur la page **Vue d'ensemble** de l'application, noter :
 - l'**ID de l'annuaire (locataire)** (*Directory (tenant) ID*) — un autre
   GUID, identique à celui récupéré à l'étape 1.
 
-Puis créer le secret d'authentification :
+Puis créer le secret d'authentification. ⚠️ Les étapes suivantes se font
+dans le **sous-menu de gauche propre à la fiche de cette application**
+(pas dans le menu général d'Entra ID) : rester sur la page de l'app
+ouverte juste au-dessus (celle où figurent l'ID d'application et le
+Tenant ID), et chercher **Certificats et secrets** dans son menu latéral,
+entre *Authentification* et *Autorisations API* :
 
 6. **Certificats et secrets** (*Certificates & secrets*) → onglet **Secrets
    client** → **Nouveau secret client** (*New client secret*) → donner une
