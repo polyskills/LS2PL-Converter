@@ -103,19 +103,20 @@ with tab_email:
         st.success("✅ Config mail enregistrée.")
 
 with tab_sauvegarde:
-    st.subheader("💾 Sauvegarde du référentiel")
+    st.subheader("💾 Sauvegarde du référentiel et des réglages")
     st.caption(
-        "Exportez l'intégralité de la « Table de correspondance » de ce client (points de vente, "
-        "comptes, codes analytiques, attribution analytique, moyens de paiement, TVA, paramètres...) "
-        "dans un fichier de sauvegarde, et restaurez-la en cas de besoin (erreur de manipulation, "
-        "changement à tester, migration...)."
+        "Exportez l'intégralité de l'environnement de travail de ce client — « Table de correspondance » "
+        "(points de vente, comptes, codes analytiques, attribution analytique, moyens de paiement, TVA...), "
+        "paramètres généraux de conversion (code journal, compte d'écart...) et configuration de la réception "
+        "mail (tenant, boîte à interroger) — dans un fichier de sauvegarde, et restaurez-le en cas de besoin "
+        "(erreur de manipulation, changement à tester, migration...) sans risquer un réglage resté différent."
     )
 
     # Confirmation affichée au rendu SUIVANT la restauration (posée en session_state juste
     # avant le st.rerun() du bouton de confirmation, plus bas) : un st.success() suivi
     # immédiatement d'un st.rerun() disparaît avant que quiconque ait pu le voir.
     if st.session_state.pop("_restauration_reussie", None):
-        st.success("✅ Référentiel restauré avec succès.")
+        st.success("✅ Référentiel et réglages restaurés avec succès.")
 
     cs1, cs2 = st.columns(2)
 
@@ -129,9 +130,19 @@ with tab_sauvegarde:
                 "exporte_le": horodatage_export,
             },
             "mappings": mappings,
+            # Paramètres généraux de conversion (code journal, compte d'écart...) sont
+            # déjà dans mappings["parametres"], donc déjà couverts ci-dessus. Seule la
+            # config mail (tenant, boîte) vit ailleurs, sur la fiche client elle-même
+            # (core.client_store), pas dans le référentiel : sans ce bloc, une
+            # restauration laisserait ce réglage-là inchangé, contrairement à
+            # l'intention "environnement de travail complet".
+            "reglages_client": {
+                "email_tenant_id": client.get("email_tenant_id", ""),
+                "email_mailbox": client.get("email_mailbox", ""),
+            },
         }
         contenu_json = json.dumps(sauvegarde, ensure_ascii=False, indent=2)
-        nom_fichier = f"referentiel_{client_id}_{now_local().strftime('%Y%m%d_%H%M%S')}.json"
+        nom_fichier = f"sauvegarde_{client_id}_{now_local().strftime('%Y%m%d_%H%M%S')}.json"
         st.download_button(
             "⬇️ Télécharger la sauvegarde (.json)",
             data=contenu_json,
@@ -163,6 +174,7 @@ with tab_sauvegarde:
 
             if contenu is not None:
                 mappings_a_restaurer = contenu.get("mappings")
+                reglages_client_a_restaurer = contenu.get("reglages_client")
                 meta = contenu.get("_meta", {})
                 if not isinstance(mappings_a_restaurer, dict):
                     st.error("❌ Fichier invalide : il ne s'agit pas d'une sauvegarde de référentiel reconnue.")
@@ -171,7 +183,7 @@ with tab_sauvegarde:
                         st.warning(
                             f"⚠️ Cette sauvegarde provient d'un autre client "
                             f"(« {meta.get('client_nom', meta.get('client_id'))} »). "
-                            f"La restaurer remplacera quand même le référentiel de « {client['nom']} »."
+                            f"La restaurer remplacera quand même le référentiel et les réglages de « {client['nom']} »."
                         )
 
                     st.caption(
@@ -187,15 +199,26 @@ with tab_sauvegarde:
                         "Moyens de paiement": len(mappings_a_restaurer.get("comptes_paiement", [])),
                         "Moyens de paiement ignorés": len(mappings_a_restaurer.get("modes_paiement_ignores", [])),
                         "Taux de TVA": len(mappings_a_restaurer.get("comptes_tva", [])),
+                        "Paramètres généraux": "inclus (code journal, compte d'écart...)",
+                        "Config mail (tenant/boîte)": (
+                            "incluse" if isinstance(reglages_client_a_restaurer, dict)
+                            else "non incluse (sauvegarde d'une version antérieure) — laissée telle quelle"
+                        ),
                     }
                     st.table(recap)
 
                     st.warning(
-                        f"⚠️ La restauration **écrasera définitivement** le référentiel actuel de « {client['nom']} » "
-                        "avec le contenu de cette sauvegarde. Cette action est irréversible."
+                        f"⚠️ La restauration **écrasera définitivement** le référentiel et les réglages actuels de "
+                        f"« {client['nom']} » avec le contenu de cette sauvegarde. Cette action est irréversible."
                     )
                     if st.button("✅ Confirmer la restauration", type="primary"):
                         save_mappings(client_id, mappings_a_restaurer)
+                        if isinstance(reglages_client_a_restaurer, dict):
+                            set_email_config(
+                                client_id,
+                                reglages_client_a_restaurer.get("email_tenant_id", ""),
+                                reglages_client_a_restaurer.get("email_mailbox", ""),
+                            )
                         st.session_state["_restauration_reussie"] = True
                         st.session_state["_version_uploader_restauration"] = _version_uploader + 1
                         st.rerun()
