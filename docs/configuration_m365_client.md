@@ -80,8 +80,24 @@ Recommandation la plus simple pour un nouveau client : **une seule boîte
 partagée**, avec un **alias par point de vente** (`Admin centre
 d'administration Microsoft 365` → **Groupes** → **Boîtes partagées** →
 créer la boîte, puis onglet **Alias e-mail** pour ajouter une adresse par
-point de vente). Aucune licence Exchange payante n'est nécessaire pour une
-boîte partagée standard (sous réserve de taille/usage raisonnable).
+point de vente).
+
+**Aucune licence n'est nécessaire** : une boîte partagée standard est
+gratuite (stockage par défaut ~50 Go, largement suffisant pour des
+exports comptables), et l'accès utilisé ici est en **permissions
+applicatives** Graph (authentification "application", sans utilisateur
+connecté) — ce mode ne dépend jamais d'une licence sur la boîte ciblée,
+contrairement à un accès délégué (au nom d'un utilisateur) qui lui
+suppose une licence Exchange sur ce compte.
+
+⚠️ Seul point de vigilance possible, sans lien avec la licence : si le
+tenant du client a mis en place une **Application Access Policy**
+Exchange (restriction du périmètre de boîtes accessible en accès
+applicatif — rare sur un tenant PME standard, plus fréquent sur un tenant
+durci), l'admin du client doit explicitement y inclure la boîte créée ici
+(`New-ApplicationAccessPolicy` en PowerShell Exchange Online), en plus du
+consentement admin de l'étape 3. Symptôme si c'est le cas : consentement
+accepté mais échec d'accès à la boîte au premier cycle du service.
 
 ➡️ **Dans LS2PL** : page **Réglages** → onglet **Gestion Email** → champ
 **« Boîte mail à interroger (UPN) »** — l'adresse de la boîte **réellement
@@ -113,11 +129,11 @@ l'app Polyskills peut obtenir un jeton d'accès pour ce tenant — c'est ce
 consentement, combiné au Tenant ID renseigné dans LS2PL (étape 1), qui
 autorise le service à lire/répondre sur la boîte du client.
 
-⚠️ Sans licence/permission adéquate sur la boîte concernée (boîte partagée
-standard incluse dans la plupart des forfaits M365 Business), le
-consentement peut être accepté mais l'accès à la boîte échouera au premier
-cycle — vérifier que la boîte créée à l'étape 2 existe bien avant cette
-étape.
+⚠️ Le consentement peut être accepté alors que la boîte créée à l'étape 2
+n'existe pas encore (ou n'est pas propagée) — vérifier son existence avant
+de tester. Aucune licence n'est en cause ici (voir étape 2) : un échec
+d'accès malgré un consentement accepté vient plutôt d'une éventuelle
+Application Access Policy Exchange restrictive côté client (voir étape 2).
 
 ➡️ **Rien à saisir dans LS2PL à cette étape** — c'est un pré-requis
 technique silencieux : sans lui, le champ Tenant ID renseigné à l'étape 1
