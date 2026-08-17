@@ -7,8 +7,10 @@ tourner comme second service, indépendant de l'app Streamlit
 (voir deploy/windows ou deploy/macos selon l'OS d'hébergement).
 
 Variables d'environnement requises :
-- LSPENNYLANE_AZURE_CLIENT_ID     : App ID de l'app Azure AD Polyskills (multi-tenant)
-- LSPENNYLANE_AZURE_CLIENT_SECRET : Secret de cette app
+- LSPENNYLANE_AZURE_CLIENT_ID     : ID d'application de l'app Azure AD créée
+                                     dans le tenant M365 du client (voir
+                                     docs/configuration_m365_client.md)
+- LSPENNYLANE_AZURE_CLIENT_SECRET : Secret client de cette app
 Optionnelle :
 - LSPENNYLANE_ALERTE_INTERNE      : adresse mail recevant les alertes et les
                                      récapitulatifs de conversion (aucun envoi
