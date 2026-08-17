@@ -35,18 +35,21 @@ from core.ui_common import select_client
 MOTS_CLES_BAR = ("bar", "utopic")
 
 
-def _deviner_index_pdv(filename: str, points_de_vente: list[dict]) -> int:
+def _deviner_index_pdv(filename: str, points_de_vente: list[dict]) -> int | None:
     """Propose un point de vente par défaut à partir du **nom de fichier brut**
     (jamais du contenu de l'export, qui ne porte aucune information de point
     de vente) : recherche le code ou le libellé de chaque point de vente
     configuré, en toutes lettres, dans le nom de fichier - sauf pour "BAR",
     restreint à MOTS_CLES_BAR (voir sa docstring). En cas de plusieurs
     correspondances (ex. « BAR » et « BARF » matchent tous les deux un nom
-    contenant « barf »), retient la plus longue, plus spécifique. Simple
-    suggestion pré-remplie dans le menu déroulant, jamais imposée : à
-    valider/corriger manuellement avant conversion."""
+    contenant « barf »), retient la plus longue, plus spécifique. Renvoie
+    None si rien ne correspond : mieux vaut laisser le menu déroulant vide
+    (choix manuel obligatoire) qu'une suggestion inventée sur l'index 0, qui
+    a l'air d'un vrai résultat alors que ce n'en est pas un. Simple
+    suggestion pré-remplie, jamais imposée : à valider/corriger manuellement
+    avant conversion."""
     nom_normalise = filename.strip().lower()
-    meilleur_index, meilleure_longueur = 0, 0
+    meilleur_index, meilleure_longueur = None, 0
     for i, p in enumerate(points_de_vente):
         code_normalise = p.get("code", "").strip().lower()
         libelle_normalise = p.get("libelle", "").strip().lower()
@@ -175,8 +178,10 @@ if uploaded_files:
                     "Point de vente",
                     options=pdv_codes if pdv_codes else ["—"],
                     index=default_pdv_index if pdv_codes else 0,
+                    placeholder="Choisir un point de vente",
                     key=f"pdv_{uf.name}",
-                    help="Ce code, combiné au compte comptable, détermine le code analytique généré.",
+                    help="Ce code, combiné au compte comptable, détermine le code analytique généré. "
+                    "Vide = aucune suggestion fiable trouvée dans le nom du fichier : à choisir manuellement.",
                 )
             with c2:
                 default_date = now_local().date()
@@ -188,8 +193,9 @@ if uploaded_files:
                         pass
                 date_piece = st.date_input("Date de pièce", value=default_date, key=f"date_{uf.name}")
             with c3:
+                suffixe_pdv = f"-{pdv}" if pdv else ""
                 numero_piece = st.text_input(
-                    "Numéro de pièce", value=f"LS-{date_piece.strftime('%y%m%d')}-{pdv}", key=f"num_{uf.name}"
+                    "Numéro de pièce", value=f"LS-{date_piece.strftime('%y%m%d')}{suffixe_pdv}", key=f"num_{uf.name}"
                 )
             with c4:
                 code_journal = st.text_input(
