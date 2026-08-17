@@ -37,6 +37,13 @@ st.markdown(
         padding-bottom: 0.75rem;
         justify-content: center;
     }
+    /* Espace libre au-dessus du titre de chaque page : Streamlit réserve 96px
+    par défaut (place pour un en-tête qu'on n'utilise pas ici), largement plus
+    que les 60px de la barre d'outils (Deploy...) qui la surplombe. Réduit à
+    48px - juste assez pour ne pas passer sous cette barre. */
+    div[data-testid="stMainBlockContainer"] {
+        padding-top: 3rem;
+    }
     img[data-testid="stSidebarLogo"] {
         max-height: none;
         height: auto;
@@ -58,21 +65,31 @@ st.markdown(
     div[data-testid="stSidebarCollapseButton"] {
         display: none !important;
     }
-    /* Sélecteur de client remonté au-dessus du menu de navigation : Streamlit
-    place stSidebarNav à une position fixe, quel que soit l'ordre des appels
-    st.sidebar dans le script (même avant st.navigation()) - seul un
-    réordonnancement flex CSS permet de le faire passer visuellement après
-    le contenu ajouté par l'app (sélecteur de client, cf. core.ui_common.
-    render_client_selector). Le pied de page (même conteneur) est retiré du
-    flux par position: fixed ci-dessous pour ne pas être entraîné vers le
-    haut avec le reste.  */
-    div[data-testid="stSidebarContent"] {
-        display: flex;
-        flex-direction: column;
+    /* Sélecteur de client remonté au-dessus du menu de navigation, SANS
+    déplacer le menu lui-même : Streamlit place stSidebarNav à une position
+    fixe (toujours juste après le logo), quel que soit l'ordre des appels
+    st.sidebar dans le script - un réordonnancement flex du conteneur entier
+    déplacerait aussi le menu selon le contenu de CHAQUE page (ex. la liste
+    de documents de la page Documentation, ajoutée au même conteneur), ce
+    qui le ferait changer de place d'une page à l'autre. Le sélecteur est
+    donc sorti du flux normal (position: absolute, ciblé par la classe
+    "st-key-<key>" que Streamlit ajoute au conteneur d'un widget nommé) et
+    positionné à l'endroit voulu ; une marge est ajoutée en haut du menu pour
+    lui laisser la place sans chevauchement. Le pied de page (même
+    conteneur partagé) est sorti du flux de la même façon, en position: fixed
+    tout en bas, indépendamment du contenu de la page. */
+    .st-key-client_id_selector {
+        position: absolute;
+        top: 108px;
+        left: 0;
+        width: 100%;
+        box-sizing: border-box;
+        padding: 0 20px;
+        z-index: 1;
     }
-    div[data-testid="stSidebarHeader"] { order: 0; }
-    div[data-testid="stSidebarUserContent"] { order: 1; }
-    div[data-testid="stSidebarNav"] { order: 2; }
+    div[data-testid="stSidebarNav"] {
+        margin-top: 56px;
+    }
     .ls-pennylane-sidebar-footer {
         position: fixed;
         left: 0;
