@@ -434,10 +434,11 @@ with tab_attribution:
             index=pdv_options.index(selected_key[0]) if selected_key and selected_key[0] in pdv_options else None,
             placeholder="Choisir un point de vente",
         )
-        f_departements = fc2.multiselect(
-            "Département LightSpeed (un ou plusieurs)",
-            options=departements_options,
-            default=[d for d in selected_departements if d in departements_options],
+        f_famille = fc2.text_input(
+            "Famille analytique",
+            value=selected_key[3] if selected_key else mappings.get("parametres", {}).get(
+                "famille_categorie_analytique", "POINT_DE_VENTE"
+            ),
         )
         fc3, fc4 = st.columns(2)
         f_compte_affiche = fc3.selectbox(
@@ -452,11 +453,10 @@ with tab_attribution:
             index=_index_ou_none(selected_key[2], codes_analytiques_options) if selected_key else None,
             placeholder="Choisir un code",
         )
-        f_famille = st.text_input(
-            "Famille analytique",
-            value=selected_key[3] if selected_key else mappings.get("parametres", {}).get(
-                "famille_categorie_analytique", "POINT_DE_VENTE"
-            ),
+        f_departements = st.multiselect(
+            "Département LightSpeed (un ou plusieurs)",
+            options=departements_options,
+            default=[d for d in selected_departements if d in departements_options],
         )
         fb1, fb2 = st.columns(2)
         submit_save = fb1.form_submit_button(
