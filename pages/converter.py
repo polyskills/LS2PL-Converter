@@ -26,11 +26,21 @@ from core.timezone import now_local
 from core.ui_common import select_client
 
 
+
+# Mots-clés strictement requis pour suggérer le point de vente "BAR" : le nom
+# du fichier LightSpeed ne contient pas toujours "bar" (ex. il peut porter le
+# nom de la marque du bar, "UTOPIC") mais un rapprochement générique avec le
+# code/libellé configuré était trop permissif (faux positifs). Restreint donc
+# ce point de vente précis à une présence explicite de l'un de ces mots.
+MOTS_CLES_BAR = ("bar", "utopic")
+
+
 def _deviner_index_pdv(filename: str, points_de_vente: list[dict]) -> int:
     """Propose un point de vente par défaut à partir du **nom de fichier brut**
     (jamais du contenu de l'export, qui ne porte aucune information de point
     de vente) : recherche le code ou le libellé de chaque point de vente
-    configuré, en toutes lettres, dans le nom de fichier. En cas de plusieurs
+    configuré, en toutes lettres, dans le nom de fichier - sauf pour "BAR",
+    restreint à MOTS_CLES_BAR (voir sa docstring). En cas de plusieurs
     correspondances (ex. « BAR » et « BARF » matchent tous les deux un nom
     contenant « barf »), retient la plus longue, plus spécifique. Simple
     suggestion pré-remplie dans le menu déroulant, jamais imposée : à
@@ -38,7 +48,13 @@ def _deviner_index_pdv(filename: str, points_de_vente: list[dict]) -> int:
     nom_normalise = filename.strip().lower()
     meilleur_index, meilleure_longueur = 0, 0
     for i, p in enumerate(points_de_vente):
-        for candidat in (p.get("code", ""), p.get("libelle", "")):
+        code_normalise = p.get("code", "").strip().lower()
+        libelle_normalise = p.get("libelle", "").strip().lower()
+        if "bar" in (code_normalise, libelle_normalise):
+            candidats = MOTS_CLES_BAR
+        else:
+            candidats = (p.get("code", ""), p.get("libelle", ""))
+        for candidat in candidats:
             candidat_normalise = candidat.strip().lower()
             if candidat_normalise and candidat_normalise in nom_normalise and len(candidat_normalise) > meilleure_longueur:
                 meilleur_index, meilleure_longueur = i, len(candidat_normalise)
