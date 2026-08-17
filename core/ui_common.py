@@ -9,30 +9,34 @@ from core.timezone import to_local
 from core.version_info import get_version_info
 
 
-def show_version_footer() -> None:
-    """Affiche, en bas de la barre latérale, le commit Git réellement en cours
-    d'exécution — pour vérifier après un déploiement que c'est bien la dernière
-    version poussée qui tourne, plutôt que de le supposer."""
-    info = get_version_info()
-    with st.sidebar:
-        st.divider()
-        if info["hash"]:
-            date_str = info["date"]
-            local_dt = to_local(info["date"]) if info["date"] else None
-            if local_dt is not None:
-                date_str = local_dt.strftime("%d/%m/%Y %H:%M") + " (heure de Paris)"
-            st.caption(
-                f"🔖 Version déployée : `{info['hash']}`"
-                + (" *(modifs. non commitées)*" if info["dirty"] else "")
-                + f"\n\nBranche `{info['branch']}` · {date_str}\n\n> {info['message']}"
-            )
-        else:
-            st.caption("🔖 Version : information Git indisponible sur cet hébergement.")
+def render_infos_techniques(client_id: str | None) -> None:
+    """Affiche l'ID technique du client actif, le commit Git réellement en
+    cours d'exécution (pour vérifier après un déploiement que c'est bien la
+    dernière version poussée qui tourne, plutôt que de le supposer) et le
+    bouton de purge du cache. Anciennement dans la barre latérale de chaque
+    page ; rassemblé dans un espace dédié de la page Réglages pour désencombrer
+    le menu latéral."""
+    if client_id is not None:
+        st.caption(f"ID technique du client actif : `{client_id}`")
 
-        if st.button("🔄 Vider le cache et recharger", use_container_width=True):
-            st.cache_data.clear()
-            st.cache_resource.clear()
-            st.rerun()
+    info = get_version_info()
+    if info["hash"]:
+        date_str = info["date"]
+        local_dt = to_local(info["date"]) if info["date"] else None
+        if local_dt is not None:
+            date_str = local_dt.strftime("%d/%m/%Y %H:%M") + " (heure de Paris)"
+        st.caption(
+            f"🔖 Version déployée : `{info['hash']}`"
+            + (" *(modifs. non commitées)*" if info["dirty"] else "")
+            + f"\n\nBranche `{info['branch']}` · {date_str}\n\n> {info['message']}"
+        )
+    else:
+        st.caption("🔖 Version : information Git indisponible sur cet hébergement.")
+
+    if st.button("🔄 Vider le cache et recharger"):
+        st.cache_data.clear()
+        st.cache_resource.clear()
+        st.rerun()
 
 
 def select_client() -> str | None:
@@ -71,7 +75,5 @@ def select_client() -> str | None:
                 key="client_id_selector",
             )
             st.session_state["client_id"] = selected
-            st.caption(f"ID technique : `{selected}`")
 
-    show_version_footer()
     return selected

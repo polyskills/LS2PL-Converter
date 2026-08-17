@@ -13,7 +13,7 @@ import streamlit as st
 from core.client_store import get_client, set_email_config
 from core.mapping_store import load_mappings, save_mappings
 from core.timezone import now_local
-from core.ui_common import select_client
+from core.ui_common import render_infos_techniques, select_client
 
 client_id = select_client()
 
@@ -178,3 +178,10 @@ with cs2:
                     save_mappings(client_id, mappings_a_restaurer)
                     st.success("Référentiel restauré avec succès.")
                     st.rerun()
+
+st.divider()
+st.subheader("🔧 Informations techniques")
+st.caption(
+    "Anciennement dans le menu latéral de chaque page ; rassemblé ici pour désencombrer la navigation."
+)
+render_infos_techniques(client_id)
