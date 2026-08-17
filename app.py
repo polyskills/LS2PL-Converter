@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from core.ui_common import render_client_selector, render_footer_sidebar
+
 st.set_page_config(page_title="LightSpeed → Pennylane", page_icon="🧾", layout="wide")
 
 st.logo("assets/logo.png", size="large")
@@ -38,8 +40,8 @@ st.markdown(
     img[data-testid="stSidebarLogo"] {
         max-height: none;
         height: auto;
-        width: 100%;
-        max-width: 100%;
+        width: 90%;
+        max-width: 90%;
         display: block;
         margin: 0 auto;
     }
@@ -56,10 +58,44 @@ st.markdown(
     div[data-testid="stSidebarCollapseButton"] {
         display: none !important;
     }
+    /* Sélecteur de client remonté au-dessus du menu de navigation : Streamlit
+    place stSidebarNav à une position fixe, quel que soit l'ordre des appels
+    st.sidebar dans le script (même avant st.navigation()) - seul un
+    réordonnancement flex CSS permet de le faire passer visuellement après
+    le contenu ajouté par l'app (sélecteur de client, cf. core.ui_common.
+    render_client_selector). Le pied de page (même conteneur) est retiré du
+    flux par position: fixed ci-dessous pour ne pas être entraîné vers le
+    haut avec le reste.  */
+    div[data-testid="stSidebarContent"] {
+        display: flex;
+        flex-direction: column;
+    }
+    div[data-testid="stSidebarHeader"] { order: 0; }
+    div[data-testid="stSidebarUserContent"] { order: 1; }
+    div[data-testid="stSidebarNav"] { order: 2; }
+    .ls-pennylane-sidebar-footer {
+        position: fixed;
+        left: 0;
+        bottom: 0.75rem;
+        width: 250px;
+        box-sizing: border-box;
+        padding: 0 1.5rem;
+        text-align: center;
+        font-size: 0.8rem;
+        color: rgba(49, 51, 63, 0.6);
+    }
     </style>
     """,
     unsafe_allow_html=True,
 )
+
+# Sélecteur de client remonté au-dessus du menu de navigation (Streamlit ne
+# laisse pas d'autre moyen : le menu de navigation occupe toujours le haut de
+# la barre latérale une fois affiché, quel que soit l'ordre des appels
+# st.sidebar une fois la page en cours d'exécution - seul un appel AVANT
+# st.navigation()/pg.run() apparaît au-dessus). Liste déroulante seule, sans
+# intitulé visible.
+render_client_selector()
 
 pages = {
     "Conversion": [
@@ -80,3 +116,7 @@ pages = {
 
 pg = st.navigation(pages)
 pg.run()
+
+# Pied de page du menu latéral, personnalisable page Réglages : appelé après
+# pg.run() pour apparaître tout en bas, sous le contenu propre à chaque page.
+render_footer_sidebar()

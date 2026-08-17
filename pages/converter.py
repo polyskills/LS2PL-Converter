@@ -17,7 +17,6 @@ import datetime as dt
 import streamlit as st
 import streamlit.components.v1 as components
 
-from core.client_store import get_client
 from core.converter import convert
 from core.history_store import record_conversion
 from core.lightspeed_parser import LightspeedParseError, parse_lightspeed_export
@@ -48,15 +47,6 @@ def _deviner_index_pdv(filename: str, points_de_vente: list[dict]) -> int:
 
 client_id = select_client()
 
-# Client actif rappelé en tête de page, au-dessus du titre : le référentiel
-# (comptes, points de vente, codes analytiques...) appliqué au fichier déposé
-# ci-dessous est TOUJOURS celui de ce client — s'assurer que c'est le bon
-# avant d'importer. Pas de bloc encadré séparé (redondant avec le sélecteur
-# de client déjà présent dans le menu latéral) : une simple ligne suffit.
-if client_id is not None:
-    client = get_client(client_id)
-    st.markdown(f"🏢 **Client actif : {client['nom']}**")
-
 st.title("🧾 Convertisseur LightSpeed → Pennylane")
 st.caption(
     "Importez un ou plusieurs exports comptables LightSpeed, associez chaque fichier à son "
@@ -78,7 +68,6 @@ if not pdv_codes:
         "**Table de correspondance** pour en créer avant de convertir un fichier."
     )
 
-st.divider()
 st.subheader("Importer le ou les exports LightSpeed")
 
 # Bloc de dépôt agrandi de 50% (plus facile à viser) et libellés traduits :

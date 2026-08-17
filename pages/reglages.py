@@ -10,6 +10,7 @@ import json
 
 import streamlit as st
 
+from core.app_config import get_footer_sidebar, set_footer_sidebar
 from core.client_store import get_client, set_email_config
 from core.mapping_store import load_mappings, save_mappings
 from core.timezone import now_local
@@ -190,3 +191,16 @@ with tab_infos:
         "Anciennement dans le menu latéral de chaque page ; rassemblé ici pour désencombrer la navigation."
     )
     render_infos_techniques(client_id)
+
+    st.divider()
+    st.subheader("🖋️ Pied de page du menu latéral")
+    st.caption(
+        "Texte affiché tout en bas du menu de navigation, sur toutes les pages et pour tous les "
+        "clients (réglage global, pas propre à ce client)."
+    )
+    footer_actuel = get_footer_sidebar()
+    nouveau_footer = st.text_input("Texte du pied de page", value=footer_actuel)
+    if st.button("💾 Enregistrer le pied de page"):
+        set_footer_sidebar(nouveau_footer)
+        st.success("Pied de page enregistré.")
+        st.rerun()

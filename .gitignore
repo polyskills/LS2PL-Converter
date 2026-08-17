@@ -8,6 +8,10 @@ __pycache__/
 # persistant en dehors du dépôt git.
 data/clients/
 
+# Réglages globaux modifiables depuis l'interface (ex. pied de page du menu
+# latéral) : état d'exécution, pas du code — jamais versionné non plus.
+data/app_config.json
+
 # Déploiement Windows : binaire NSSM téléchargé à l'installation, et logs
 # du service — jamais versionnés.
 deploy/windows/tools/
