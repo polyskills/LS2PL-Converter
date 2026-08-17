@@ -113,7 +113,17 @@ st.markdown(
 # st.sidebar une fois la page en cours d'exécution - seul un appel AVANT
 # st.navigation()/pg.run() apparaît au-dessus). Liste déroulante seule, sans
 # intitulé visible.
-render_client_selector()
+#
+# Appelé AVANT st.navigation()/pg.run() : une exception ici (accès disque,
+# etc.) empêcherait sinon st.navigation() de s'exécuter, et Streamlit
+# retomberait sur la navigation automatique par nom de fichier (pages/ brut,
+# sans titres ni icônes ni groupes) - un incident déjà rencontré. On isole
+# donc cet appel pour que la navigation reste fonctionnelle même si le
+# sélecteur, lui, échoue.
+try:
+    render_client_selector()
+except Exception as e:
+    st.sidebar.error(f"⚠️ Sélecteur de client indisponible : {e}")
 
 pages = {
     "Conversion": [
