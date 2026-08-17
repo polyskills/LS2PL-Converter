@@ -11,7 +11,7 @@ import json
 import streamlit as st
 
 from core.app_config import get_footer_sidebar, set_footer_sidebar
-from core.client_store import get_client, set_email_config
+from core.client_store import get_client, rename_client, set_email_config
 from core.mapping_store import load_mappings, save_mappings
 from core.timezone import now_local
 from core.ui_common import render_infos_techniques, select_client
@@ -190,6 +190,8 @@ with tab_sauvegarde:
                         f"Sauvegarde exportée le {meta.get('exporte_le', '?')}" +
                         (f" pour « {meta['client_nom']} »" if meta.get("client_nom") else "") + "."
                     )
+                    nom_a_restaurer = meta.get("client_nom", "").strip()
+                    renommage_prevu = bool(nom_a_restaurer) and nom_a_restaurer != client["nom"]
                     recap = {
                         "Points de vente": len(mappings_a_restaurer.get("points_de_vente", [])),
                         "Comptes de vente": len(mappings_a_restaurer.get("comptes_de_vente", [])),
@@ -203,6 +205,10 @@ with tab_sauvegarde:
                         "Config mail (tenant/boîte)": (
                             "incluse" if isinstance(reglages_client_a_restaurer, dict)
                             else "non incluse (sauvegarde d'une version antérieure) — laissée telle quelle"
+                        ),
+                        "Nom du client": (
+                            f"« {client['nom']} » → « {nom_a_restaurer} »" if renommage_prevu
+                            else f"inchangé (« {client['nom']} »)"
                         ),
                     }
                     st.table(recap)
@@ -219,6 +225,8 @@ with tab_sauvegarde:
                                 reglages_client_a_restaurer.get("email_tenant_id", ""),
                                 reglages_client_a_restaurer.get("email_mailbox", ""),
                             )
+                        if renommage_prevu:
+                            rename_client(client_id, nom_a_restaurer)
                         st.session_state["_restauration_reussie"] = True
                         st.session_state["_version_uploader_restauration"] = _version_uploader + 1
                         st.rerun()
