@@ -44,10 +44,17 @@ def _deviner_index_pdv(filename: str, points_de_vente: list[dict]) -> int | None
     nom_normalise = filename.strip().lower()
     cible = "bar" if any(mot in nom_normalise for mot in MOTS_CLES_BAR) else "restaurant"
     for i, p in enumerate(points_de_vente):
-        code_normalise = p.get("code", "").strip().lower()
-        libelle_normalise = p.get("libelle", "").strip().lower()
-        if cible in (code_normalise, libelle_normalise):
-            return i
+        for candidat in (p.get("code", ""), p.get("libelle", "")):
+            candidat_normalise = candidat.strip().lower()
+            # Comparaison dans les deux sens : couvre aussi bien un code/libellé
+            # configuré à l'identique ("RESTAURANT") qu'un intitulé plus complet
+            # ("Restaurant Anne-Sophie Pic") ou abrégé ("REST"). Le sens abrégé
+            # est borné à 3 caractères minimum pour ne pas faire matcher un code
+            # trop court (ex. "R") avec n'importe quelle lettre de "bar"/"restaurant".
+            if candidat_normalise and (
+                cible in candidat_normalise or (len(candidat_normalise) >= 3 and candidat_normalise in cible)
+            ):
+                return i
     return None
 
 
