@@ -3,8 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from core.client_store import create_client, list_clients, rename_client
-from core.mapping_store import seed_with_examples
+from core.client_store import create_client, delete_client, list_clients, rename_client
 from core.ui_common import select_client
 
 st.title("👥 Clients")
@@ -21,22 +20,13 @@ select_client()
 st.divider()
 st.subheader("Créer un nouveau client")
 with st.form("nouveau_client"):
-    c1, c2 = st.columns([3, 2])
-    nom = c1.text_input("Nom du client", placeholder="Ex : Louvre Gourmet")
-    avec_exemples = c2.checkbox(
-        "Pré-remplir avec un référentiel d'exemple",
-        value=False,
-        help="À réserver aux tests : le référentiel d'exemple ne correspond pas au plan "
-        "comptable réel du client et doit être entièrement revérifié avant usage en production.",
-    )
+    nom = st.text_input("Nom du client", placeholder="Ex : Louvre Gourmet")
     submitted = st.form_submit_button("Créer le client", type="primary")
     if submitted:
         if not nom.strip():
             st.error("Le nom du client est obligatoire.")
         else:
             client = create_client(nom.strip())
-            if avec_exemples:
-                seed_with_examples(client["id"])
             st.session_state["client_id"] = client["id"]
             st.success(f"Client « {client['nom']} » créé.")
             st.rerun()
@@ -54,3 +44,26 @@ else:
                 rename_client(c["id"], new_name.strip())
                 st.success("Nom mis à jour.")
                 st.rerun()
+
+            st.divider()
+            _cle_confirmation = f"confirmation_suppression_{c['id']}"
+            if st.button("🗑️ Supprimer ce client", key=f"delete_{c['id']}"):
+                st.session_state[_cle_confirmation] = True
+            if st.session_state.get(_cle_confirmation):
+                st.warning(
+                    f"⚠️ Ceci supprime **définitivement** « {c['nom']} » et tout son contenu "
+                    "(référentiel, historique de conversions, fichiers archivés). Cette action "
+                    "est irréversible — pensez à faire une sauvegarde (page **Réglages**) avant "
+                    "si un doute subsiste."
+                )
+                cv1, cv2, _ = st.columns([1, 1, 4])
+                if cv1.button("✅ Oui, supprimer", key=f"confirm_delete_{c['id']}", type="primary"):
+                    delete_client(c["id"])
+                    st.session_state.pop(_cle_confirmation, None)
+                    if st.session_state.get("client_id") == c["id"]:
+                        st.session_state.pop("client_id", None)
+                    st.success(f"Client « {c['nom']} » supprimé.")
+                    st.rerun()
+                if cv2.button("Annuler", key=f"cancel_delete_{c['id']}"):
+                    st.session_state.pop(_cle_confirmation, None)
+                    st.rerun()

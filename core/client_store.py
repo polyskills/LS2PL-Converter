@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import unicodedata
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -97,6 +98,17 @@ def rename_client(client_id: str, nouveau_nom: str) -> None:
             c["nom"] = nouveau_nom
     with open(CLIENTS_INDEX, "w", encoding="utf-8") as f:
         json.dump(clients, f, ensure_ascii=False, indent=2)
+
+
+def delete_client(client_id: str) -> None:
+    """Supprime définitivement un client : sa fiche (index.json) ET tout son
+    espace disque (référentiel, historique des conversions, fichiers
+    archivés). Irréversible - à protéger d'une confirmation explicite côté
+    interface avant tout appel."""
+    clients = [c for c in list_clients() if c["id"] != client_id]
+    with open(CLIENTS_INDEX, "w", encoding="utf-8") as f:
+        json.dump(clients, f, ensure_ascii=False, indent=2)
+    shutil.rmtree(client_dir(client_id), ignore_errors=True)
 
 
 def set_email_config(client_id: str, tenant_id: str, mailbox: str) -> None:
