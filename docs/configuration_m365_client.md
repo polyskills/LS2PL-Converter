@@ -79,8 +79,12 @@ Enfin, déclarer les permissions Microsoft Graph nécessaires :
 8. **Autorisations API** (*API permissions*) → **Ajouter une autorisation**
    (*Add a permission*) → **Microsoft Graph** → **Autorisations
    d'application** (*Application permissions* — pas *Delegated*, le
-   service tourne sans utilisateur connecté) → cocher `Mail.Read` et
+   service tourne sans utilisateur connecté) → cocher `Mail.ReadWrite` et
    `Mail.Send` → **Ajouter des autorisations**.
+   ⚠️ Bien `Mail.ReadWrite`, pas `Mail.Read` seul : le service doit pouvoir
+   marquer les mails traités comme lus (`PATCH` sur le message), une
+   opération d'écriture que `Mail.Read` seul refuse (HTTP 403
+   `ErrorAccessDenied`).
 
 L'étape de consentement (bouton *Grant admin consent*) se fait juste
 après, à l'étape 3 ci-dessous, une fois la boîte mail créée.
@@ -163,7 +167,7 @@ LightSpeed si des alias sont utilisés.
 
 L'application demande deux permissions **applicatives** Microsoft Graph
 (accès à la boîte sans utilisateur connecté, adaptées à un service
-automatisé) : `Mail.Read` et `Mail.Send`, déclarées à l'étape 0.
+automatisé) : `Mail.ReadWrite` et `Mail.Send`, déclarées à l'étape 0.
 
 L'app étant enregistrée dans le tenant du client (single-tenant), pas
 besoin d'URL de consentement externe : sur la page de l'application →

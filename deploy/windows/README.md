@@ -62,7 +62,7 @@ l'app comprise, dans
 [`docs/configuration_m365_client.md`](../../docs/configuration_m365_client.md)) :
 1. Une **app registration Azure AD** créée directement dans le tenant M365
    du client (single tenant, une par client), avec permission applicative
-   `Mail.Read` + `Mail.Send` sur Microsoft Graph.
+   `Mail.ReadWrite` + `Mail.Send` sur Microsoft Graph.
 2. Le **consentement admin** accordé sur cette app, sur son propre tenant
    (bouton *Grant admin consent*, page API permissions de l'app).
 3. Trois variables d'environnement **machine** (pas juste utilisateur, sans

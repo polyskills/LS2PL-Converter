@@ -52,7 +52,7 @@ pour l'installation du service. En résumé :
   deux chez le client)
 - [ ] L'**app Azure AD créée dans le tenant du client** (pas Polyskills) et
   le **consentement admin** accordé sur ses permissions Graph
-  (`Mail.Read` + `Mail.Send`) — voir
+  (`Mail.ReadWrite` + `Mail.Send`) — voir
   [configuration_m365_client.md](configuration_m365_client.md) pour le
   pas-à-pas complet
 - [ ] Les variables d'environnement du service (`LSPENNYLANE_AZURE_CLIENT_ID`,

@@ -34,7 +34,7 @@ aurait pu convertir silencieusement sur le mauvais référentiel.
 ## Où vivent les boîtes mail
 
 Les boîtes mail — et l'app Azure AD elle-même (permissions applicatives
-Graph `Mail.Read` + `Mail.Send`) — vivent dans le **tenant M365 du
+Graph `Mail.ReadWrite` + `Mail.Send`) — vivent dans le **tenant M365 du
 client** : c'est le `tenant_id` renseigné par client (page Réglages) qui
 détermine quelle autorité Azure AD émet le jeton d'accès. Le client donne,
 une fois, son **consentement admin** à cette app sur son propre tenant
