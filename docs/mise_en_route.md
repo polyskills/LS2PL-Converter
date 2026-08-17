@@ -48,10 +48,13 @@ pour l'installation du service. En résumé :
   vente correspondant (page Table de correspondance) — c'est elle qui
   identifie client + point de vente à la réception, jamais le nom de fichier
 - [ ] Le **tenant ID** M365 du client + la **boîte mail** à interroger
-  renseignés page **Réglages** (la boîte vit chez le client, pas chez
-  Polyskills)
-- [ ] Le **consentement admin** du client donné sur l'app Azure AD
-  multi-tenant de Polyskills (permissions Graph `Mail.Read` + `Mail.Send`)
+  renseignés page **Réglages** (l'app Azure AD et la boîte vivent toutes
+  deux chez le client)
+- [ ] L'**app Azure AD créée dans le tenant du client** (pas Polyskills) et
+  le **consentement admin** accordé sur ses permissions Graph
+  (`Mail.Read` + `Mail.Send`) — voir
+  [configuration_m365_client.md](configuration_m365_client.md) pour le
+  pas-à-pas complet
 - [ ] Les variables d'environnement du service (`LSPENNYLANE_AZURE_CLIENT_ID`,
   `LSPENNYLANE_AZURE_CLIENT_SECRET`, `LSPENNYLANE_ALERTE_INTERNE`) définies
   sur le serveur avant d'installer `install-email-poller-service.ps1`

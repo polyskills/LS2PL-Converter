@@ -33,13 +33,15 @@ aurait pu convertir silencieusement sur le mauvais référentiel.
 
 ## Où vivent les boîtes mail
 
-Les boîtes mail vivent dans le **tenant M365 du client**, pas celui de
-Polyskills. Une seule app Azure AD, enregistrée en **multi-tenant** côté
-Polyskills (permissions applicatives Graph `Mail.Read` + `Mail.Send`), est
-réutilisée pour tous les clients : c'est le `tenant_id` renseigné par
-client (page Réglages) qui détermine quelle autorité Azure AD émet le
-jeton d'accès. Chaque client doit donner, une fois, son **consentement
-admin** à cette app sur son propre tenant.
+Les boîtes mail — et l'app Azure AD elle-même (permissions applicatives
+Graph `Mail.Read` + `Mail.Send`) — vivent dans le **tenant M365 du
+client** : c'est le `tenant_id` renseigné par client (page Réglages) qui
+détermine quelle autorité Azure AD émet le jeton d'accès. Le client donne,
+une fois, son **consentement admin** à cette app sur son propre tenant
+(bouton *Grant admin consent*, l'app étant enregistrée en son sein — pas
+de flux de consentement externe). Voir
+[configuration_m365_client.md](configuration_m365_client.md) pour le
+pas-à-pas complet, création de l'app comprise.
 
 ## Déroulé d'un cycle (`core/email_poller.py`)
 

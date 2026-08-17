@@ -1,11 +1,11 @@
 # Configuration M365 côté client — pas à pas
 
-Ce document est destiné à l'**administrateur M365 du client** (ou à
-Polyskills en l'accompagnant) : il liste, dans l'ordre, tout ce qu'il faut
-faire **dans le tenant Microsoft 365 du client** pour que l'application
-puisse récupérer automatiquement les exports LightSpeed reçus par mail et
-en extraire les pièces jointes, ainsi que les réglages correspondants à
-saisir ensuite côté **LS2PL**.
+Ce document liste, dans l'ordre, tout ce qu'il faut faire **dans le tenant
+Microsoft 365 du client** — création de l'application Azure AD comprise —
+pour que l'application puisse récupérer automatiquement les exports
+LightSpeed reçus par mail et en extraire les pièces jointes, ainsi que les
+réglages correspondants à saisir ensuite côté **LS2PL**. Il permet de
+suivre la procédure de bout en bout, y compris pour un premier test.
 
 Pour le fonctionnement détaillé du service une fois en place (identification
 par adresse, gestion des échecs...), voir
@@ -17,18 +17,20 @@ ou
 
 ## Vue d'ensemble
 
-Une seule application Azure AD, enregistrée en **multi-tenant** et
-possédée par **Polyskills**, sert pour tous les clients. Rien à créer côté
-client sur ce point : le client se contente d'y **consentir**. En
-revanche, la **boîte mail interrogée** (et les adresses d'envoi
-LightSpeed) vivent bien dans le **tenant du client**, pas chez Polyskills.
+L'application Azure AD est enregistrée **directement dans le tenant M365
+du client** (application **single tenant**, pas multi-tenant) : pas d'URL
+de consentement externe à faire valider par un tiers — l'admin du client
+crée l'app dans son propre tenant et s'auto-accorde les permissions.
+La **boîte mail interrogée** (et les adresses d'envoi LightSpeed) vivent
+elles aussi dans ce même tenant.
 
-Quatre étapes côté client :
+Cinq étapes côté client :
 
+0. Créer l'**application (App registration)** dans Entra ID du client.
 1. Récupérer l'**ID du tenant** M365 du client.
 2. Créer la (ou les) **boîte(s) mail** qui recevront les exports LightSpeed.
-3. Donner le **consentement administrateur** à l'app Polyskills sur ces
-   boîtes.
+3. Donner le **consentement administrateur** sur les permissions de
+   l'application.
 4. Configurer **LightSpeed** pour envoyer l'export comptable automatique
    vers l'adresse dédiée de chaque point de vente.
 
@@ -36,17 +38,63 @@ Chaque étape est suivie du réglage correspondant à saisir dans LS2PL.
 
 ---
 
-## 1. Récupérer l'ID du tenant M365 du client
+## 0. Créer l'application dans Entra ID du client
 
 Dans le portail **Entra ID** (anciennement Azure AD) du client
-(`https://entra.microsoft.com`, ou `portal.azure.com` > Microsoft Entra
-ID) :
+(`https://entra.microsoft.com`), avec un compte **administrateur** de ce
+tenant :
 
-- **Vue d'ensemble** (Overview) → copier l'**ID de locataire** (*Tenant
-  ID*), un GUID du type `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`.
+1. **Identités** → **Applications** → **Inscriptions d'applications**
+   (*App registrations*) → **Nouvelle inscription** (*New registration*).
+2. Nom de l'application : libre, par ex. `LS2PL - <nom du client>`.
+3. **Types de comptes pris en charge** : choisir **« Comptes dans cet
+   annuaire d'organisation uniquement »** (*single tenant* — l'app ne
+   sert que ce client, pas besoin de multi-tenant).
+4. **URI de redirection** : laisser vide — le service s'authentifie en
+   flux **client credentials** (app-only), sans redirection navigateur.
+5. **Inscrire** (*Register*).
 
-Seul un compte disposant d'un rôle **administrateur** sur ce tenant peut
-effectuer les étapes suivantes (consentement admin en particulier).
+Une fois créée, sur la page **Vue d'ensemble** de l'application, noter :
+
+- l'**ID d'application (client)** (*Application (client) ID*) — un GUID ;
+- l'**ID de l'annuaire (locataire)** (*Directory (tenant) ID*) — un autre
+  GUID, identique à celui récupéré à l'étape 1.
+
+Puis créer le secret d'authentification :
+
+6. **Certificats et secrets** (*Certificates & secrets*) → onglet **Secrets
+   client** → **Nouveau secret client** (*New client secret*) → donner une
+   description et une expiration (24 mois par ex.), **Ajouter**.
+7. Copier immédiatement la **valeur** (*Value*) du secret affichée — elle
+   ne sera **plus jamais visible** ensuite (seul son identifiant restera
+   affiché).
+
+Enfin, déclarer les permissions Microsoft Graph nécessaires :
+
+8. **Autorisations API** (*API permissions*) → **Ajouter une autorisation**
+   (*Add a permission*) → **Microsoft Graph** → **Autorisations
+   d'application** (*Application permissions* — pas *Delegated*, le
+   service tourne sans utilisateur connecté) → cocher `Mail.Read` et
+   `Mail.Send` → **Ajouter des autorisations**.
+
+L'étape de consentement (bouton *Grant admin consent*) se fait juste
+après, à l'étape 3 ci-dessous, une fois la boîte mail créée.
+
+➡️ **Rien à saisir dans LS2PL à cette étape** — l'**ID d'application** et
+le **secret client** notés ici sont à transmettre à Polyskills : ce sont
+les variables d'environnement `LSPENNYLANE_AZURE_CLIENT_ID` et
+`LSPENNYLANE_AZURE_CLIENT_SECRET` du service installé côté serveur
+d'hébergement (voir les README de déploiement). Le **Tenant ID**, lui, se
+saisit directement dans LS2PL (étape 1).
+
+---
+
+## 1. Récupérer l'ID du tenant M365 du client
+
+Déjà noté à l'étape précédente (*Directory (tenant) ID*), mais aussi
+consultable indépendamment sur Entra ID → **Vue d'ensemble** (*Overview*)
+→ **ID de locataire** (*Tenant ID*), un GUID du type
+`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`.
 
 ➡️ **Dans LS2PL** : page **Réglages** → onglet **Gestion Email** → champ
 **« Tenant ID Azure AD du client »**.
@@ -106,38 +154,31 @@ LightSpeed si des alias sont utilisés.
 
 ---
 
-## 3. Donner le consentement administrateur à l'app Polyskills
+## 3. Donner le consentement administrateur
 
-L'app Azure AD Polyskills demande deux permissions **applicatives**
-Microsoft Graph (accès à la boîte sans utilisateur connecté, adaptées à un
-service automatisé) : `Mail.Read` et `Mail.Send`.
+L'application demande deux permissions **applicatives** Microsoft Graph
+(accès à la boîte sans utilisateur connecté, adaptées à un service
+automatisé) : `Mail.Read` et `Mail.Send`, déclarées à l'étape 0.
 
-Un administrateur du tenant client doit se rendre sur l'URL de
-consentement admin suivante (remplacer `<TENANT_ID_CLIENT>` par l'ID
-récupéré à l'étape 1, et `<APP_ID_POLYSKILLS>` par l'identifiant
-d'application — *Application (client) ID* — de l'app Azure AD Polyskills,
-fourni par Polyskills) :
+L'app étant enregistrée dans le tenant du client (single-tenant), pas
+besoin d'URL de consentement externe : sur la page de l'application →
+**Autorisations API** (*API permissions*), un administrateur du tenant
+clique directement sur **Accorder un consentement d'administrateur pour
+`<nom du tenant>`** (*Grant admin consent for `<tenant>`*), puis confirme.
+Les deux permissions passent au statut **Accordé** (*Granted*) — c'est ce
+consentement, combiné à l'ID d'application/secret/Tenant ID transmis à
+Polyskills, qui autorise le service à lire/répondre sur la boîte du
+client.
 
-```
-https://login.microsoftonline.com/<TENANT_ID_CLIENT>/adminconsent?client_id=<APP_ID_POLYSKILLS>
-```
-
-En s'y connectant avec un compte **administrateur** de ce tenant, une page
-Microsoft récapitule les permissions demandées (`Mail.Read`, `Mail.Send`)
-et propose d'**accepter au nom de l'organisation**. Une fois accepté,
-l'app Polyskills peut obtenir un jeton d'accès pour ce tenant — c'est ce
-consentement, combiné au Tenant ID renseigné dans LS2PL (étape 1), qui
-autorise le service à lire/répondre sur la boîte du client.
-
-⚠️ Le consentement peut être accepté alors que la boîte créée à l'étape 2
+⚠️ Le consentement peut être accordé alors que la boîte créée à l'étape 2
 n'existe pas encore (ou n'est pas propagée) — vérifier son existence avant
 de tester. Aucune licence n'est en cause ici (voir étape 2) : un échec
-d'accès malgré un consentement accepté vient plutôt d'une éventuelle
+d'accès malgré un consentement accordé vient plutôt d'une éventuelle
 Application Access Policy Exchange restrictive côté client (voir étape 2).
 
 ➡️ **Rien à saisir dans LS2PL à cette étape** — c'est un pré-requis
-technique silencieux : sans lui, le champ Tenant ID renseigné à l'étape 1
-ne permettra pas d'obtenir de jeton, et le fetch échouera pour ce client.
+technique : sans lui, le service ne pourra pas obtenir de jeton, et le
+fetch échouera pour ce client.
 
 ---
 
@@ -164,15 +205,16 @@ conversion, par sécurité.
 
 | Étape | Où | Qui | Réglage LS2PL correspondant |
 |---|---|---|---|
+| 0. Créer l'application | Entra ID du client → App registrations | Admin client | ID d'application + secret → transmis pour la config serveur (`LSPENNYLANE_AZURE_CLIENT_ID`/`_SECRET`) |
 | 1. Récupérer le Tenant ID | Entra ID du client | Admin client | Réglages → Gestion Email → *Tenant ID Azure AD du client* |
 | 2. Créer la boîte (+ alias par PDV) | Centre d'admin M365 du client | Admin client | Réglages → Gestion Email → *Boîte mail à interroger (UPN)* |
-| 3. Consentement admin | URL `adminconsent` (portail Microsoft) | Admin client | — (pré-requis technique, pas de champ dédié) |
+| 3. Consentement admin | Page de l'app → API permissions → Grant admin consent | Admin client | — (pré-requis technique, pas de champ dédié) |
 | 4. Envoi auto par point de vente | Paramétrage export LightSpeed | Client / Polyskills | Table de correspondance → Points de vente → *adresse_email* |
 
-Une fois les quatre étapes faites pour un client et les réglages
-enregistrés dans LS2PL, le service de fetch (installé côté serveur
-d'hébergement — voir les README de déploiement) prend le relais
-automatiquement au cycle suivant, sans autre action.
+Une fois ces cinq étapes faites pour un client, les réglages saisis dans
+LS2PL, et le service (côté serveur d'hébergement — voir les README de
+déploiement) configuré avec l'ID d'application et le secret de l'étape 0,
+le fetch automatique prend le relais au cycle suivant, sans autre action.
 
 ## Vérifier que ça fonctionne
 

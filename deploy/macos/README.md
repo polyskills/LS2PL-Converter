@@ -69,12 +69,14 @@ tenant M365 **du client**), les convertit avec le même moteur que l'import
 manuel, et renvoie le résultat par mail — voir `core/email_poller.py` pour
 le détail du fonctionnement.
 
-Prérequis avant installation :
-1. Une **app registration Azure AD multi-tenant** enregistrée côté
-   Polyskills, avec permission applicative `Mail.Read` + `Mail.Send` sur
-   Microsoft Graph.
-2. Le **consentement admin** donné par chaque client sur cette app, dans son
-   propre tenant (`https://login.microsoftonline.com/<tenant_id_client>/adminconsent?client_id=<app_id>`).
+Prérequis avant installation (voir le pas-à-pas complet, création de
+l'app comprise, dans
+[`docs/configuration_m365_client.md`](../../docs/configuration_m365_client.md)) :
+1. Une **app registration Azure AD** créée directement dans le tenant M365
+   du client (single tenant, une par client), avec permission applicative
+   `Mail.Read` + `Mail.Send` sur Microsoft Graph.
+2. Le **consentement admin** accordé sur cette app, sur son propre tenant
+   (bouton *Grant admin consent*, page API permissions de l'app).
 3. Contrairement à Windows (variables d'environnement "Machine"), macOS n'a
    pas d'équivalent simple pour un LaunchDaemon : les secrets se passent
    donc en paramètres du script d'installation, qui les écrit dans le plist
@@ -82,6 +84,16 @@ Prérequis avant installation :
 4. Pour chaque client concerné : tenant ID + boîte mail renseignés page
    **Clients**, et adresse mail dédiée sur chaque point de vente page
    **Table de correspondance**.
+
+⚠️ Les identifiants `--azure-client-id`/`--azure-client-secret` passés au
+script sont **globaux au service**, donc communs à tous les clients
+traités par ce serveur — cela suppose une app registration par client dont
+l'ID/secret est **le même** pour tous, ce qui ne fonctionne que tant qu'**un
+seul client** utilise le fetch automatique sur ce serveur. Pour plusieurs
+clients simultanément, il faudra soit une app par client avec des
+identifiants distincts (nécessite d'adapter `core/email_poller.py` pour
+lire des credentials par client), soit revenir à une app unique enregistrée
+en multi-tenant.
 
 Puis, dans le même Terminal, après `install-service.sh` :
 ```bash
