@@ -10,6 +10,7 @@ appelé qu'ici, jamais dans les pages elles-mêmes.
 from __future__ import annotations
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from core.ui_common import render_client_selector, render_footer_sidebar
 
@@ -133,6 +134,38 @@ pages = {
 
 pg = st.navigation(pages)
 pg.run()
+
+# Groupe "Documentation" replié par défaut au chargement : Streamlit ne propose
+# aucun réglage Python pour l'état initial (déplié/replié) d'un groupe de menu,
+# seul un clic sur son en-tête le replie, côté navigateur uniquement (pas de
+# rerun ni de session_state associés). Un clic simulé au premier chargement
+# reproduit ce geste ; le drapeau posé sur window.parent (persistant tant que
+# l'onglet reste ouvert, contrairement à l'iframe du composant qui est
+# recréée à chaque rerun) évite de re-replier le groupe si l'utilisateur l'a
+# rouvert entre-temps.
+components.html(
+    r"""
+    <script>
+    function replierDocumentationUneFois() {
+        if (window.parent.__lsPennylaneDocReplie) return;
+        const doc = window.parent.document;
+        const entetes = doc.querySelectorAll('[data-testid="stNavSectionHeader"]');
+        for (const entete of entetes) {
+            if (entete.textContent.trim().startsWith("Documentation")) {
+                entete.click();
+                window.parent.__lsPennylaneDocReplie = true;
+                return;
+            }
+        }
+    }
+    new MutationObserver(replierDocumentationUneFois).observe(window.parent.document.body, {
+        childList: true, subtree: true,
+    });
+    replierDocumentationUneFois();
+    </script>
+    """,
+    height=0,
+)
 
 # Pied de page du menu latéral, personnalisable page Réglages : appelé après
 # pg.run() pour apparaître tout en bas, sous le contenu propre à chaque page.
