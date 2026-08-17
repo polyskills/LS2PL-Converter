@@ -33,7 +33,9 @@ conversion **bloque volontairement** l'export (jamais de perte silencieuse)
 
 Uniquement nécessaire si le client veut recevoir la conversion sans passer
 par un import manuel. Voir **[fetch_mail.md](fetch_mail.md)** pour le
-fonctionnement détaillé, et selon l'OS d'hébergement,
+fonctionnement détaillé, **[configuration_m365_client.md](configuration_m365_client.md)**
+pour le pas-à-pas complet côté tenant M365 du client (Tenant ID, boîte
+mail, consentement admin, LightSpeed), et selon l'OS d'hébergement,
 **[deploy/windows/README.md](../deploy/windows/README.md#service-de-fetch-automatique-des-exports-lightspeed-par-mail-optionnel)**
 ou
 **[deploy/macos/README.md](../deploy/macos/README.md#service-de-fetch-automatique-des-exports-lightspeed-par-mail-optionnel)**
