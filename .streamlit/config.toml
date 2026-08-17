@@ -1,9 +1,8 @@
 # Thème de l'application. Couleur de fond secondaire (barre latérale +
 # widgets) ajustée par rapport au défaut Streamlit, pour distinguer plus
 # nettement la barre latérale de la zone de contenu principale. Taille de
-# police de base testée à 20px (défaut Streamlit : 16px) pour voir l'impact
-# sur la présentation avant de la valider.
+# police de base testée à 18px (défaut Streamlit : 16px).
 [theme]
 base = "light"
 secondaryBackgroundColor = "#E3E6EC"
-baseFontSize = 20
+baseFontSize = 18
