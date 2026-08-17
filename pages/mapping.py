@@ -428,31 +428,31 @@ with tab_attribution:
 
     with st.form("form_attribution", clear_on_submit=False):
         fc1, fc2 = st.columns(2)
-        f_compte_affiche = fc1.selectbox(
-            "Compte comptable",
-            options=comptes_options,
-            index=_index_ou_none(selected_key[1], comptes_options) if selected_key else None,
-            placeholder="Choisir un compte",
-        )
-        f_pdv = fc2.selectbox(
+        f_pdv = fc1.selectbox(
             "Point de vente",
             options=pdv_options,
             index=pdv_options.index(selected_key[0]) if selected_key and selected_key[0] in pdv_options else None,
             placeholder="Choisir un point de vente",
         )
-        f_departements = st.multiselect(
-            "Départements LightSpeed (un ou plusieurs)",
+        f_departements = fc2.multiselect(
+            "Département LightSpeed (un ou plusieurs)",
             options=departements_options,
             default=[d for d in selected_departements if d in departements_options],
         )
         fc3, fc4 = st.columns(2)
-        f_code_affiche = fc3.selectbox(
+        f_compte_affiche = fc3.selectbox(
+            "Compte comptable",
+            options=comptes_options,
+            index=_index_ou_none(selected_key[1], comptes_options) if selected_key else None,
+            placeholder="Choisir un compte",
+        )
+        f_code_affiche = fc4.selectbox(
             "Code analytique",
             options=codes_analytiques_options,
             index=_index_ou_none(selected_key[2], codes_analytiques_options) if selected_key else None,
             placeholder="Choisir un code",
         )
-        f_famille = fc4.text_input(
+        f_famille = st.text_input(
             "Famille analytique",
             value=selected_key[3] if selected_key else mappings.get("parametres", {}).get(
                 "famille_categorie_analytique", "POINT_DE_VENTE"
