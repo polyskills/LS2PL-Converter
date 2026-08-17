@@ -55,15 +55,20 @@ class GraphClient:
         return resp
 
     def list_unread_with_attachments(self, mailbox: str, folder: str = "inbox", top: int = 25) -> list[dict]:
-        """Mails non lus avec pièce jointe, les plus récents en premier. La
-        boîte reçoit sur plusieurs adresses dédiées (une par point de vente) :
-        c'est `toRecipients` sur chaque message, pas cet appel, qui distingue
+        """Mails non lus avec pièce jointe. Pas de tri demandé à Graph
+        (`$orderby`) : combiné à ce `$filter`, Graph le refuse en HTTP 400
+        "InefficientFilter" (propriétés non indexées pour ce combo, sauf à
+        passer par les capacités de requête avancées) — sans intérêt ici,
+        chaque mail non lu étant de toute façon traité puis marqué lu, l'ordre
+        de traitement n'a pas d'impact fonctionnel. La boîte reçoit sur
+        plusieurs adresses dédiées (une par point de vente) : c'est
+        `toRecipients` sur chaque message, pas cet appel, qui distingue
         lesquelles (cf. core.email_ingest.identifier_source)."""
         url = (
             f"{GRAPH_BASE}/users/{mailbox}/mailFolders/{folder}/messages"
             "?$filter=isRead eq false and hasAttachments eq true"
             "&$select=id,subject,toRecipients,receivedDateTime"
-            f"&$top={top}&$orderby=receivedDateTime desc"
+            f"&$top={top}"
         )
         return self._request("GET", url).json().get("value", [])
 
