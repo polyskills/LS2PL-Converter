@@ -97,8 +97,10 @@ with tab_email:
     )
     if st.button("💾 Enregistrer la config mail"):
         set_email_config(client_id, tenant_id, mailbox)
-        st.success("Config mail enregistrée.")
+        st.session_state["_config_mail_enregistree"] = True
         st.rerun()
+    if st.session_state.pop("_config_mail_enregistree", None):
+        st.success("✅ Config mail enregistrée.")
 
 with tab_sauvegarde:
     st.subheader("💾 Sauvegarde du référentiel")
@@ -108,6 +110,12 @@ with tab_sauvegarde:
         "dans un fichier de sauvegarde, et restaurez-la en cas de besoin (erreur de manipulation, "
         "changement à tester, migration...)."
     )
+
+    # Confirmation affichée au rendu SUIVANT la restauration (posée en session_state juste
+    # avant le st.rerun() du bouton de confirmation, plus bas) : un st.success() suivi
+    # immédiatement d'un st.rerun() disparaît avant que quiconque ait pu le voir.
+    if st.session_state.pop("_restauration_reussie", None):
+        st.success("✅ Référentiel restauré avec succès.")
 
     cs1, cs2 = st.columns(2)
 
@@ -134,10 +142,16 @@ with tab_sauvegarde:
 
     with cs2:
         st.markdown("**Restaurer une sauvegarde**")
+        # Clé variable (compteur en session_state, jamais réassigné directement à la
+        # main du widget - interdit par Streamlit) : after une restauration réussie,
+        # on l'incrémente pour forcer un uploader vierge plutôt que de laisser le
+        # fichier déjà traité, son récapitulatif et son bouton de confirmation
+        # trainer à l'écran comme s'il restait à cliquer.
+        _version_uploader = st.session_state.get("_version_uploader_restauration", 0)
         fichier_restauration = st.file_uploader(
             "Fichier de sauvegarde (.json)",
             type=["json"],
-            key="uploader_restauration_referentiel",
+            key=f"uploader_restauration_referentiel_{_version_uploader}",
         )
 
         if fichier_restauration is not None:
@@ -182,7 +196,8 @@ with tab_sauvegarde:
                     )
                     if st.button("✅ Confirmer la restauration", type="primary"):
                         save_mappings(client_id, mappings_a_restaurer)
-                        st.success("Référentiel restauré avec succès.")
+                        st.session_state["_restauration_reussie"] = True
+                        st.session_state["_version_uploader_restauration"] = _version_uploader + 1
                         st.rerun()
 
 with tab_infos:
@@ -202,5 +217,7 @@ with tab_infos:
     nouveau_footer = st.text_input("Texte du pied de page", value=footer_actuel)
     if st.button("💾 Enregistrer le pied de page"):
         set_footer_sidebar(nouveau_footer)
-        st.success("Pied de page enregistré.")
+        st.session_state["_footer_enregistre"] = True
         st.rerun()
+    if st.session_state.pop("_footer_enregistre", None):
+        st.success("✅ Pied de page enregistré.")
