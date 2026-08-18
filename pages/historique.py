@@ -1,7 +1,9 @@
 """
 Historique des conversions du client sélectionné : fichiers source et générés
-conservés, indicateurs de contrôle par conversion, et détection (informative,
-non bloquante) des jours sans import pour un point de vente donné.
+conservés (les MAX_HISTORIQUE_CONVERSIONS plus récentes seulement, cf.
+core.history_store), indicateurs de contrôle par conversion, et alerte
+(informative, non bloquante) sur l'ancienneté de la dernière conversion
+réussie.
 """
 from __future__ import annotations
 
@@ -9,15 +11,17 @@ import os
 
 import streamlit as st
 
-from core.history_store import detect_missing_days, list_history
+from core.history_store import MAX_HISTORIQUE_CONVERSIONS, jours_depuis_derniere_conversion_reussie, list_history
 from core.ui_common import select_client
 
 client_id = select_client()
 
 st.title("🕓 Historique des conversions")
 st.caption(
-    "Chaque conversion réalisée est conservée ici avec son fichier source, son fichier généré, "
-    "et le détail des contrôles effectués — pour l'audit et l'explication d'éventuelles anomalies."
+    f"Les {MAX_HISTORIQUE_CONVERSIONS} conversions les plus récentes sont conservées ici avec leur fichier "
+    "source, leur fichier généré, et le détail des contrôles effectués — pour l'audit et l'explication "
+    "d'éventuelles anomalies. Les conversions plus anciennes restent consultables ailleurs (Pennylane, "
+    "export comptable du client)."
 )
 
 if client_id is None:
@@ -39,17 +43,19 @@ filtre_statut = c2.multiselect(
 filtered = [e for e in entries if e["point_de_vente"] in filtre_pdv and e["statut"] in filtre_statut]
 
 st.divider()
-st.subheader("⚠️ Jours sans conversion enregistrée")
-trous = detect_missing_days(entries)
-if trous:
+st.subheader("⚠️ Dernière conversion réussie")
+jours = jours_depuis_derniere_conversion_reussie(entries)
+if jours is None:
     st.warning(
-        f"{len(trous)} jour(s) sans conversion enregistrée entre la première et la dernière date "
-        "connue, pour au moins un point de vente. Ceci est purement informatif — un point de vente "
-        "peut être légitimement fermé un jour donné — mais mérite vérification."
+        "Aucune conversion réussie (statut OK) dans l'historique conservé. Vérifier que le fetch "
+        "automatique fonctionne toujours, ou que la fermeture prolongée est bien volontaire."
     )
-    st.dataframe(sorted(trous, key=lambda t: (t["point_de_vente"], t["date_manquante"])), use_container_width=True, hide_index=True)
+elif jours == 0:
+    st.success("Dernière conversion réussie : aujourd'hui.")
+elif jours == 1:
+    st.info("Dernière conversion réussie : hier.")
 else:
-    st.success("Aucun trou détecté dans le suivi des dates connues.")
+    (st.warning if jours >= 3 else st.info)(f"Dernière conversion réussie il y a {jours} jours.")
 
 st.divider()
 st.subheader(f"Conversions ({len(filtered)}/{len(entries)})")

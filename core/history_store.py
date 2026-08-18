@@ -21,6 +21,14 @@ import uuid
 from core.client_store import client_history_files_dir, client_history_index_path
 from core.converter import ConversionResult
 
+# Nombre maximum de conversions conservées par client (toutes indépendantes
+# du point de vente) : au-delà, les plus anciennes sont purgées (journal +
+# fichiers source/générés associés) à chaque nouvel enregistrement. Cet outil
+# n'a pas vocation à être l'archive de référence sur la durée — les
+# conversions plus anciennes restent consultables ailleurs (Pennylane,
+# export comptable du client).
+MAX_HISTORIQUE_CONVERSIONS = 45
+
 
 def _slug(s: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", s).strip("_") or "fichier"
@@ -86,7 +94,35 @@ def record_conversion(
     with open(index_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(entree, ensure_ascii=False) + "\n")
 
+    _purger_historique(client_id)
+
     return entree
+
+
+def _purger_historique(client_id: str) -> None:
+    """Ne conserve que les MAX_HISTORIQUE_CONVERSIONS conversions les plus
+    récentes (toutes confondues, indépendamment du point de vente) : réécrit
+    le journal sans les plus anciennes et supprime leurs fichiers source/
+    générés associés, pour ne pas accumuler indéfiniment sur un disque non
+    dimensionné pour ça."""
+    entries = list_history(client_id)  # déjà trié par horodatage décroissant
+    a_purger = entries[MAX_HISTORIQUE_CONVERSIONS:]
+    if not a_purger:
+        return
+
+    for e in a_purger:
+        for cle in ("fichier_source_chemin", "fichier_genere_chemin"):
+            chemin = e.get(cle)
+            if chemin and os.path.exists(chemin):
+                os.remove(chemin)
+
+    conservees = entries[:MAX_HISTORIQUE_CONVERSIONS]
+    index_path = client_history_index_path(client_id)
+    with open(index_path, "w", encoding="utf-8") as f:
+        # Réécrit du plus ancien au plus récent (ordre naturel d'un journal
+        # append-only), même si `entries` était trié à l'envers pour l'affichage.
+        for e in reversed(conservees):
+            f.write(json.dumps(e, ensure_ascii=False) + "\n")
 
 
 def list_history(client_id: str) -> list[dict]:
@@ -107,38 +143,24 @@ def list_history(client_id: str) -> list[dict]:
     return entries
 
 
-def _parse_date_piece(date_piece: str | None) -> dt.date | None:
-    if not date_piece:
-        return None
-    for fmt in ("%d/%m/%y", "%d/%m/%Y"):
-        try:
-            return dt.datetime.strptime(date_piece, fmt).date()
-        except ValueError:
-            continue
-    return None
+def jours_depuis_derniere_conversion_reussie(entries: list[dict]) -> int | None:
+    """Nombre de jours écoulés depuis la dernière conversion au statut OK
+    (succès sans avertissement ni erreur), toutes conversions confondues pour
+    ce client. None si aucune conversion réussie n'est présente dans
+    l'historique conservé (MAX_HISTORIQUE_CONVERSIONS) — ne veut pas
+    forcément dire qu'il n'y en a jamais eu, seulement qu'elle est sortie de
+    la fenêtre conservée ici ; les conversions plus anciennes restent
+    consultables ailleurs (Pennylane, export comptable du client).
 
+    `entries` est attendu trié par horodatage décroissant (cf. list_history)."""
+    from core.timezone import now_local
 
-def detect_missing_days(entries: list[dict]) -> list[dict]:
-    """Repère, pour chaque point de vente, les jours ouvrés sans conversion
-    enregistrée entre la première et la dernière date connue. Purement
-    informatif (n'importe quel point de vente peut légitimement être fermé
-    un jour donné) : à vérifier au cas par cas, jamais bloquant."""
-    par_pdv: dict[str, list[dt.date]] = {}
     for e in entries:
-        d = _parse_date_piece(e.get("date_piece"))
-        if d is None:
+        if e.get("statut") != "OK":
             continue
-        par_pdv.setdefault(e["point_de_vente"], []).append(d)
-
-    trous = []
-    for pdv, dates in par_pdv.items():
-        dates = sorted(set(dates))
-        if len(dates) < 2:
+        try:
+            derniere = dt.datetime.strptime(e["horodatage"], "%Y-%m-%d %H:%M:%S").date()
+        except (KeyError, ValueError):
             continue
-        cursor = dates[0]
-        connues = set(dates)
-        while cursor < dates[-1]:
-            cursor += dt.timedelta(days=1)
-            if cursor not in connues:
-                trous.append({"point_de_vente": pdv, "date_manquante": cursor.isoformat()})
-    return trous
+        return (now_local().date() - derniere).days
+    return None
