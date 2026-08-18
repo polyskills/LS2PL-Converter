@@ -61,13 +61,17 @@ class GraphClient:
         passer par les capacités de requête avancées) — sans intérêt ici,
         chaque mail non lu étant de toute façon traité puis marqué lu, l'ordre
         de traitement n'a pas d'impact fonctionnel. La boîte reçoit sur
-        plusieurs adresses dédiées (une par point de vente) : c'est
-        `toRecipients` sur chaque message, pas cet appel, qui distingue
-        lesquelles (cf. core.email_ingest.identifier_source)."""
+        plusieurs adresses dédiées, en pratique des alias d'une même boîte
+        partagée (une par point de vente) : `internetMessageHeaders` (l'en-tête
+        RFC5322 `To:` brut) est demandé en plus de `toRecipients`, ce dernier
+        étant résolu par Exchange contre l'annuaire et donc parfois normalisé
+        vers l'adresse principale de la boîte plutôt que l'alias réellement
+        utilisé par l'expéditeur — cf. core.email_poller._adresses_destinataires
+        qui préfère l'en-tête brut quand il est disponible."""
         url = (
             f"{GRAPH_BASE}/users/{mailbox}/mailFolders/{folder}/messages"
             "?$filter=isRead eq false and hasAttachments eq true"
-            "&$select=id,subject,toRecipients,receivedDateTime"
+            "&$select=id,subject,toRecipients,receivedDateTime,internetMessageHeaders"
             f"&$top={top}"
         )
         return self._request("GET", url).json().get("value", [])

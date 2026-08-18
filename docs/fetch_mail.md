@@ -27,6 +27,16 @@ vente à cette adresse. À la réception :
    (`core.email_ingest.extraire_periode`), pour pré-remplir la date de
    pièce — jamais à identifier le client, moins fiable.
 
+⚠️ Quand une même boîte reçoit plusieurs adresses dédiées via des **alias**
+(cas courant : une boîte partagée unique + un alias par point de vente,
+recommandé dans `docs/configuration_m365_client.md`), le champ `toRecipients`
+restitué par Microsoft Graph est **résolu contre l'annuaire** et peut donc
+être normalisé vers l'adresse **principale** de la boîte, perdant l'alias
+réellement utilisé par l'expéditeur. `core.email_poller._adresses_destinataires`
+contourne ce piège en lisant d'abord l'en-tête RFC5322 `To:` **brut**
+(`internetMessageHeaders`, jamais réécrit en transit), avec repli sur
+`toRecipients` si cet en-tête est absent.
+
 C'est délibéré : une adresse mal configurée déclenche une alerte interne
 immédiate (adresse inconnue), alors qu'un nom de fichier mal interprété
 aurait pu convertir silencieusement sur le mauvais référentiel.

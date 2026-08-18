@@ -25,6 +25,7 @@ faux client, sans réseau ni tenant Azure réel.
 """
 from __future__ import annotations
 
+import email.utils
 import logging
 import os
 
@@ -50,6 +51,25 @@ def _adresse_alerte_interne() -> str | None:
     return os.environ.get("LSPENNYLANE_ALERTE_INTERNE") or None
 
 
+def _adresses_destinataires(message: dict) -> list[str]:
+    """Adresses destinataires candidates pour l'identification, dans l'ordre
+    de préférence. Priorité à l'en-tête RFC5322 `To:` brut
+    (`internetMessageHeaders`, tel qu'écrit par l'expéditeur, jamais réécrit
+    en transit) plutôt qu'à `toRecipients` : quand la boîte interrogée est
+    jointe via un alias (plusieurs adresses dédiées sur une même boîte
+    partagée, une par point de vente — cf. docs/configuration_m365_client.md),
+    Exchange résout `toRecipients` contre l'annuaire et le normalise vers
+    l'adresse **principale** de la boîte, perdant l'alias réellement utilisé.
+    Repli sur `toRecipients` si l'en-tête est absent (permission insuffisante,
+    ou mail sans en-tête To exploitable)."""
+    for header in message.get("internetMessageHeaders") or []:
+        if header.get("name", "").lower() == "to":
+            adresses = [a for _, a in email.utils.getaddresses([header.get("value", "")]) if a]
+            if adresses:
+                return adresses
+    return [r["emailAddress"]["address"] for r in message.get("toRecipients", [])]
+
+
 def traiter_client(graph, client: dict) -> None:
     """Traite tous les mails en attente de la boîte configurée pour ce
     client. Ne fait rien si tenant/boîte ne sont pas renseignés (fetch
@@ -64,7 +84,7 @@ def traiter_client(graph, client: dict) -> None:
 
 
 def traiter_message(graph, mailbox: str, message: dict) -> None:
-    to_addresses = [r["emailAddress"]["address"] for r in message.get("toRecipients", [])]
+    adresses_candidates = _adresses_destinataires(message)
     fichiers = [
         f for f in graph.list_file_attachments(mailbox, message["id"])
         if _extension_supportee(f["name"])
@@ -77,20 +97,34 @@ def traiter_message(graph, mailbox: str, message: dict) -> None:
     if not fichiers:
         return
 
-    adresse_cible = to_addresses[0] if to_addresses else None
     for fichier in fichiers:
-        _traiter_piece_jointe(graph, mailbox, adresse_cible, fichier["name"], fichier["content"])
+        _traiter_piece_jointe(graph, mailbox, adresses_candidates, fichier["name"], fichier["content"])
 
     graph.mark_as_read(mailbox, message["id"])
 
 
-def _traiter_piece_jointe(graph, mailbox: str, adresse_cible: str | None, filename: str, raw: bytes) -> None:
-    try:
-        if not adresse_cible:
-            raise EmailIngestError(f"« {filename} » : mail sans destinataire exploitable.")
-        source = identifier_source(adresse_cible, filename)
-    except EmailIngestError as exc:
-        _alerter(graph, mailbox, sujet=f"Export LightSpeed non identifié — {filename}", detail=str(exc))
+def _traiter_piece_jointe(graph, mailbox: str, adresses_candidates: list[str], filename: str, raw: bytes) -> None:
+    # Plusieurs adresses candidates (cf. _adresses_destinataires) : on essaie
+    # chacune jusqu'à en trouver une rattachée à un point de vente — utile
+    # notamment en repli (toRecipients) quand plusieurs destinataires
+    # figurent sur le mail. Aucune de reconnue -> alerte avec le détail de la
+    # dernière tentative.
+    source = None
+    adresse_cible = None
+    derniere_erreur: EmailIngestError | None = None
+    if not adresses_candidates:
+        derniere_erreur = EmailIngestError(f"« {filename} » : mail sans destinataire exploitable.")
+    else:
+        for adresse in adresses_candidates:
+            try:
+                source = identifier_source(adresse, filename)
+                adresse_cible = adresse
+                break
+            except EmailIngestError as exc:
+                derniere_erreur = exc
+
+    if source is None:
+        _alerter(graph, mailbox, sujet=f"Export LightSpeed non identifié — {filename}", detail=str(derniere_erreur))
         return
 
     try:

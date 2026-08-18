@@ -59,7 +59,10 @@ class FakeGraph:
         self.sent = []  # list[dict(subject, body_html, to_addresses, attachments)]
 
     def list_unread_with_attachments(self, mailbox, folder="inbox", top=25):
-        return [{"id": m["id"], "toRecipients": m["toRecipients"]} for m in self.messages]
+        return [
+            {"id": m["id"], "toRecipients": m["toRecipients"], "internetMessageHeaders": m.get("internetMessageHeaders")}
+            for m in self.messages
+        ]
 
     def list_file_attachments(self, mailbox, message_id):
         msg = next(m for m in self.messages if m["id"] == message_id)
@@ -112,6 +115,36 @@ def test_mail_avec_adresse_connue_convertit_et_repond():
     assert graph.sent[0]["to_addresses"] == ["rest@client.example.com"]  # à l'adresse d'origine, pas à l'alerte interne
     assert len(graph.sent[0]["attachments"]) == 2  # fichier source + CSV généré
 
+    historique = list_history(client["id"])
+    assert len(historique) == 1
+    assert historique[0]["statut"] == "OK"
+    assert historique[0]["point_de_vente"] == "REST"
+
+
+def test_mail_recu_via_alias_identifie_via_en_tete_to_brut():
+    # Reproduit le cas réel observé sur le tenant Maison PIC : la boîte
+    # partagée reçoit plusieurs adresses dédiées via alias, mais Exchange
+    # normalise `toRecipients` vers l'adresse PRINCIPALE de la boîte au lieu
+    # de l'alias réellement utilisé par l'expéditeur — seul l'en-tête `To:`
+    # brut (internetMessageHeaders) préserve l'alias.
+    client = _client_pret("rapport_ls2pl_paris-bar@annesophiepic-paris.com")
+    graph = FakeGraph()
+    graph.messages.append(
+        {
+            "id": "m1",
+            # toRecipients résolu par Exchange vers la boîte principale, PAS l'alias :
+            "toRecipients": [{"emailAddress": {"address": "rapport_ls2pl_paris@annesophiepic-paris.com"}}],
+            "internetMessageHeaders": [
+                {"name": "To", "value": "rapport_ls2pl_paris-bar@annesophiepic-paris.com"},
+            ],
+            "attachments": [("export_business_export_accounting_20260810_20260811.xlsx", _build_sample_xlsx())],
+        }
+    )
+
+    traiter_client(graph, client)
+
+    assert graph.marked_read == ["m1"]
+    assert len(graph.sent) == 1  # identifié malgré toRecipients trompeur -> conversion + réponse, pas d'alerte
     historique = list_history(client["id"])
     assert len(historique) == 1
     assert historique[0]["statut"] == "OK"
