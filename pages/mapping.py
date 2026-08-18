@@ -122,7 +122,8 @@ with tab_pdv:
         "réception automatique). Elle doit être unique entre tous les clients. "
         "L'**adresse mail de résultat** est optionnelle elle aussi : par défaut, le CSV Pennylane et le "
         "récapitulatif sont renvoyés à l'adresse de réception (celle qui a reçu l'export) ; renseignez-la "
-        "pour les envoyer ailleurs à la place (ex. la comptable, une adresse de suivi dédiée...)."
+        "pour les envoyer ailleurs à la place (ex. la comptable, une adresse de suivi dédiée...). Plusieurs "
+        "destinataires possibles, séparés par une virgule ou un point-virgule."
     )
     edited_pdv_df = st.data_editor(
         _as_editable_df(
@@ -142,7 +143,8 @@ with tab_pdv:
             ),
             "adresse_resultat": st.column_config.TextColumn(
                 "Adresse mail de résultat (optionnelle)",
-                help="Destinataire du CSV Pennylane et du récapitulatif après conversion automatique. "
+                help="Destinataire(s) du CSV Pennylane et du récapitulatif après conversion automatique — "
+                "plusieurs adresses possibles, séparées par une virgule ou un point-virgule. "
                 "Laisser vide pour répondre à l'adresse de réception (comportement par défaut).",
             ),
             "commentaires": st.column_config.TextColumn("Commentaires"),

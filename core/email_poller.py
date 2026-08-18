@@ -28,6 +28,7 @@ from __future__ import annotations
 import email.utils
 import logging
 import os
+import re
 
 from core.client_store import list_clients
 from core.converter import convert
@@ -161,9 +162,10 @@ def _traiter_piece_jointe(graph, mailbox: str, adresses_candidates: list[str], f
         # adresse_resultat (Table de correspondance > Points de vente) permet de renvoyer
         # ailleurs qu'à l'adresse de réception (ex. la comptable plutôt que la boîte
         # partagée elle-même) ; vide par défaut -> comportement historique inchangé.
+        # Plusieurs destinataires possibles, séparés par une virgule ou un point-virgule.
         pdv = find_pdv(mappings, source.code_pdv)
-        adresse_resultat = ((pdv or {}).get("adresse_resultat") or "").strip() or adresse_cible
-        _envoyer_resultat(graph, mailbox, adresse_resultat, source, res, raw, csv_bytes)
+        adresses_resultat = _adresses_resultat(pdv, repli=adresse_cible)
+        _envoyer_resultat(graph, mailbox, adresses_resultat, source, res, raw, csv_bytes)
     else:
         detail = "\n".join(res.erreurs)
         if source.avertissement:
@@ -175,7 +177,19 @@ def _traiter_piece_jointe(graph, mailbox: str, adresses_candidates: list[str], f
         )
 
 
-def _envoyer_resultat(graph, mailbox, adresse_resultat, source, res, raw: bytes, csv_bytes: bytes) -> None:
+def _adresses_resultat(pdv: dict | None, repli: str) -> list[str]:
+    """Destinataire(s) du résultat pour ce point de vente : le champ
+    adresse_resultat (Table de correspondance) accepte plusieurs adresses
+    séparées par une virgule ou un point-virgule (ex. "compta@..., direction@...").
+    Vide/absent -> repli sur `repli` (l'adresse de réception d'origine)."""
+    brut = ((pdv or {}).get("adresse_resultat") or "").strip()
+    if not brut:
+        return [repli]
+    adresses = [a.strip() for a in re.split(r"[,;]", brut) if a.strip()]
+    return adresses or [repli]
+
+
+def _envoyer_resultat(graph, mailbox, adresses_resultat, source, res, raw: bytes, csv_bytes: bytes) -> None:
     corps = (
         f"<p>Conversion automatique effectuée pour <b>{source.client_id} / {source.code_pdv}</b> "
         f"({source.date_debut or '?'} → {source.date_fin or '?'}).</p>"
@@ -190,10 +204,11 @@ def _envoyer_resultat(graph, mailbox, adresse_resultat, source, res, raw: bytes,
         mailbox,
         subject=f"Conversion LightSpeed → Pennylane — {source.client_id}/{source.code_pdv} — {source.date_debut or ''}",
         body_html=corps,
-        # adresse_resultat = adresse_resultat du point de vente (Table de correspondance)
-        # si renseignée, sinon l'adresse de réception d'origine (fallback résolu par
-        # l'appelant, jamais l'alerte interne) — cf. docstring du module.
-        to_addresses=[adresse_resultat],
+        # adresses_resultat = adresse_resultat du point de vente (Table de correspondance,
+        # une ou plusieurs séparées par virgule/point-virgule) si renseignée, sinon
+        # l'adresse de réception d'origine (fallback résolu par l'appelant, jamais
+        # l'alerte interne) — cf. docstring du module.
+        to_addresses=adresses_resultat,
         attachments=[(res.source_filename, raw), (f"import_pennylane_{res.point_de_vente}.csv", csv_bytes)],
     )
 

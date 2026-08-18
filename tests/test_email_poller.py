@@ -176,6 +176,33 @@ def test_mail_avec_adresse_resultat_configuree_repond_a_cette_adresse():
     assert graph.sent[0]["to_addresses"] == ["compta@client.example.com"]
 
 
+def test_mail_avec_plusieurs_adresses_resultat_separees_par_virgule_ou_point_virgule():
+    client = _client_pret("rest@client.example.com")
+    m = load_mappings(client["id"])
+    for pdv in m["points_de_vente"]:
+        if pdv["code"] == "REST":
+            pdv["adresse_resultat"] = " compta@client.example.com , direction@client.example.com;autre@client.example.com "
+    save_mappings(client["id"], m)
+
+    graph = FakeGraph()
+    graph.messages.append(
+        {
+            "id": "m1",
+            "toRecipients": [{"emailAddress": {"address": "rest@client.example.com"}}],
+            "attachments": [("client_rest_business_export_accounting_20260810_20260811.xlsx", _build_sample_xlsx())],
+        }
+    )
+
+    traiter_client(graph, client)
+
+    assert len(graph.sent) == 1
+    assert graph.sent[0]["to_addresses"] == [
+        "compta@client.example.com",
+        "direction@client.example.com",
+        "autre@client.example.com",
+    ]
+
+
 def test_mail_avec_adresse_inconnue_alerte_sans_convertir():
     client = _client_pret("rest@client.example.com")
     graph = FakeGraph()
