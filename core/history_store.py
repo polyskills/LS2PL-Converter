@@ -40,9 +40,13 @@ def record_conversion(
     source_bytes: bytes,
     csv_bytes: bytes,
     horodatage: str,
+    destinataires_email: list[str] | None = None,
 ) -> dict:
     """Enregistre une conversion (un fichier source = une entrée) et retourne
-    l'entrée de journal écrite."""
+    l'entrée de journal écrite. `destinataires_email` : adresse(s) mail ayant
+    reçu (ou censées recevoir, en cas d'échec) le résultat — uniquement pour
+    les conversions issues du fetch automatique ; vide pour un import manuel
+    (page Convertisseur), qui ne notifie personne par mail."""
     files_dir = client_history_files_dir(client_id)
     os.makedirs(files_dir, exist_ok=True)
 
@@ -87,6 +91,7 @@ def record_conversion(
         "erreurs": res.erreurs,
         "date_piece": res.lignes[0]["Date"] if res.lignes else None,
         "numero_piece": res.lignes[0]["Numéro de pièce"] if res.lignes else None,
+        "destinataires_email": list(destinataires_email or []),
     }
 
     index_path = client_history_index_path(client_id)

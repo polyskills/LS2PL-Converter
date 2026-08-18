@@ -68,10 +68,15 @@ for e in filtered:
         f"{e['fichier_source_nom']} (pièce {e.get('numero_piece') or '—'})"
     )
     with st.expander(titre):
+        destinataires = e.get("destinataires_email") or []
+        st.caption(
+            "📧 Destinataire(s) mail : " + (", ".join(destinataires) if destinataires else "— (import manuel)")
+        )
+
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric("CA HT source", f"{e['ca_ht_source']:,.2f} €".replace(",", " "))
+        m1.metric("CA HT source (LightSpeed)", f"{e['ca_ht_source']:,.2f} €".replace(",", " "))
         m2.metric(
-            "CA HT généré",
+            "CA HT généré (Pennylane)",
             f"{e['ca_ht_genere']:,.2f} €".replace(",", " "),
             delta=f"{e['ca_ht_genere'] - e['ca_ht_source']:+.2f} €",
             delta_color="off" if abs(e["ca_ht_genere"] - e["ca_ht_source"]) < 0.01 else "inverse",

@@ -6,16 +6,20 @@ Clients), et pour chaque mail non lu avec pièce jointe dans cette boîte :
 
 1. identifie client + point de vente à partir de l'adresse destinataire
    (core.email_ingest.identifier_source) — jamais depuis le nom de fichier ;
-2. adresse inconnue -> alerte interne, mail marqué lu (pas de réessai en
-   boucle : l'alerte suffit, le mail original reste consultable) ;
+2. adresse inconnue -> alerte interne + notification à l'adresse qui a reçu
+   le mail (même non reconnue par la Table de correspondance : utile si un
+   référentiel a été modifié par erreur, pour que quelqu'un côté client s'en
+   rende compte sans dépendre de l'alerte interne), mail marqué lu (pas de
+   réessai en boucle : l'alerte suffit, le mail original reste consultable) ;
 3. adresse connue -> parse + convertit avec le référentiel du client
    identifié, exactement le même pipeline que l'import manuel (app.py) ;
-4. archive la tentative dans l'historique du client, succès ou échec ;
-5. répond : succès -> fichiers + récapitulatif à l'adresse « résultat » du
-   point de vente si elle est configurée (Table de correspondance), sinon à
-   l'adresse d'origine ; échec (mapping manquant...) -> alerte interne avec
-   le détail, jamais envoyée au client (cohérent avec le blocage strict déjà
-   en place ailleurs) ;
+4. archive la tentative dans l'historique du client, succès ou échec, avec
+   le(s) destinataire(s) concerné(s) ;
+5. répond : succès -> fichiers + récapitulatif ; échec (fichier illisible,
+   mapping manquant...) -> le motif de l'échec, sans fichier joint ; dans les
+   deux cas à l'adresse « résultat » du point de vente si elle est
+   configurée (Table de correspondance), sinon à l'adresse de réception
+   d'origine — plus, en cas d'échec, une alerte interne avec le même détail ;
 6. marque le mail source comme lu.
 
 Ce module ne dépend d'aucun SDK Graph concret : `graph` n'importe quoi
@@ -125,23 +129,49 @@ def _traiter_piece_jointe(graph, mailbox: str, adresses_candidates: list[str], f
                 derniere_erreur = exc
 
     if source is None:
-        _alerter(graph, mailbox, sujet=f"Export LightSpeed non identifié — {filename}", detail=str(derniere_erreur))
+        detail = str(derniere_erreur)
+        _alerter(graph, mailbox, sujet=f"Export LightSpeed non identifié — {filename}", detail=detail)
+        # Notifie aussi l'adresse (ou les adresses) ayant reçu ce mail, même non
+        # reconnue(s) par la Table de correspondance : sans client/point de vente
+        # identifié, impossible de résoudre une adresse_resultat, donc on répond
+        # directement à l'adresse candidate elle-même (alias de la boîte
+        # partagée) — utile en particulier si une entrée du référentiel a été
+        # modifiée ou supprimée par erreur.
+        _notifier_echec_client(
+            graph, mailbox, adresses_candidates,
+            sujet="Échec de traitement automatique de votre export LightSpeed",
+            detail=detail,
+        )
         return
+
+    mappings = load_mappings(source.client_id)
+    pdv = find_pdv(mappings, source.code_pdv)
+    # adresse_resultat (Table de correspondance > Points de vente) permet de renvoyer
+    # ailleurs qu'à l'adresse de réception (ex. la comptable plutôt que la boîte
+    # partagée elle-même) ; vide par défaut -> repli sur l'adresse d'origine.
+    # Plusieurs destinataires possibles, séparés par une virgule ou un point-virgule.
+    # Sert à la fois pour le résultat (succès) et la notification d'échec.
+    adresses_notification = _adresses_resultat(pdv, repli=adresse_cible)
 
     try:
         export = parse_lightspeed_export(raw, filename)
     except LightspeedParseError as exc:
+        detail = str(exc)
         _alerter(
             graph, mailbox,
             sujet=f"Export LightSpeed illisible — {source.client_id}/{source.code_pdv} — {filename}",
-            detail=str(exc),
+            detail=detail,
+        )
+        _notifier_echec_client(
+            graph, mailbox, adresses_notification,
+            sujet=f"Échec de traitement de votre export LightSpeed — {source.code_pdv}",
+            detail=detail,
         )
         return
 
     # Si la période n'a pas pu être déduite du nom de fichier (source.avertissement
     # renseigné), on retombe sur la date du jour de traitement pour la pièce comptable ;
     # l'avertissement est repris dans l'alerte en cas d'échec plus bas, à vérifier manuellement.
-    mappings = load_mappings(source.client_id)
     date_piece = source.date_debut or now_local().strftime("%d/%m/%y")
     numero_piece = f"LS-{date_piece.replace('/', '')}-{source.code_pdv}"
 
@@ -156,16 +186,10 @@ def _traiter_piece_jointe(graph, mailbox: str, adresses_candidates: list[str], f
 
     horodatage = now_local().strftime("%Y-%m-%d %H:%M:%S")
     csv_bytes = build_pennylane_csv([res])
-    record_conversion(source.client_id, res, raw, csv_bytes, horodatage)
+    record_conversion(source.client_id, res, raw, csv_bytes, horodatage, destinataires_email=adresses_notification)
 
     if res.sans_erreur:
-        # adresse_resultat (Table de correspondance > Points de vente) permet de renvoyer
-        # ailleurs qu'à l'adresse de réception (ex. la comptable plutôt que la boîte
-        # partagée elle-même) ; vide par défaut -> comportement historique inchangé.
-        # Plusieurs destinataires possibles, séparés par une virgule ou un point-virgule.
-        pdv = find_pdv(mappings, source.code_pdv)
-        adresses_resultat = _adresses_resultat(pdv, repli=adresse_cible)
-        _envoyer_resultat(graph, mailbox, adresses_resultat, source, res, raw, csv_bytes)
+        _envoyer_resultat(graph, mailbox, adresses_notification, source, res, raw, csv_bytes)
     else:
         detail = "\n".join(res.erreurs)
         if source.avertissement:
@@ -173,6 +197,11 @@ def _traiter_piece_jointe(graph, mailbox: str, adresses_candidates: list[str], f
         _alerter(
             graph, mailbox,
             sujet=f"Échec de conversion LightSpeed → Pennylane — {source.client_id}/{source.code_pdv} — {filename}",
+            detail=detail,
+        )
+        _notifier_echec_client(
+            graph, mailbox, adresses_notification,
+            sujet=f"Échec de conversion de votre export LightSpeed — {source.code_pdv}",
             detail=detail,
         )
 
@@ -210,6 +239,26 @@ def _envoyer_resultat(graph, mailbox, adresses_resultat, source, res, raw: bytes
         # l'alerte interne) — cf. docstring du module.
         to_addresses=adresses_resultat,
         attachments=[(res.source_filename, raw), (f"import_pennylane_{res.point_de_vente}.csv", csv_bytes)],
+    )
+
+
+def _notifier_echec_client(graph, mailbox, destinataires: list[str], sujet: str, detail: str) -> None:
+    """Notifie, en plus de l'alerte interne (_alerter), le(s) destinataire(s)
+    côté client concerné(s) par un échec — y compris quand l'adresse
+    destinataire elle-même n'est pas reconnue (ex. une entrée modifiée par
+    erreur dans la Table de correspondance) : sans ça, seule Polyskills le
+    saurait, à condition d'avoir configuré LSPENNYLANE_ALERTE_INTERNE, sans
+    jamais remonter jusqu'à qui pourrait corriger le référentiel. Aucun
+    fichier joint ici (contrairement à _envoyer_resultat) : uniquement le
+    motif de l'échec, en clair."""
+    destinataires = [a for a in dict.fromkeys(destinataires) if a]  # dédoublonne, préserve l'ordre
+    if not destinataires:
+        return
+    graph.send_mail(
+        mailbox,
+        subject=f"[LS2PL] {sujet}",
+        body_html=f"<p>{detail}</p>",
+        to_addresses=destinataires,
     )
 
 
