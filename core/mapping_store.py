@@ -40,7 +40,9 @@ Tables :
                          juste pas où l'imputer (cf. compte_ecart pour ça).
 - comptes_tva          : Taux de TVA -> Compte de TVA collectée
 - points_de_vente      : liste des points de vente connus (code + libellé + adresse mail
-                         de réception de l'export automatique, optionnelle)
+                         de réception de l'export automatique, optionnelle + adresse mail
+                         de résultat, optionnelle - destinataire du CSV et du récapitulatif
+                         après conversion, par défaut l'adresse de réception elle-même)
 - parametres           : réglages généraux (code journal, compte d'écart/report, etc.)
 """
 from __future__ import annotations
@@ -255,6 +257,16 @@ def find_client_pdv_by_email(adresse_email: str) -> tuple[str, str] | None:
         for pdv in mappings.get("points_de_vente", []):
             if _norm_key(pdv.get("adresse_email", "")) == target:
                 return client["id"], pdv["code"]
+    return None
+
+
+def find_pdv(mappings: dict, code_pdv: str) -> dict | None:
+    """Retrouve la fiche d'un point de vente par son code (ex. pour lire son
+    adresse_resultat depuis le service de fetch mail, une fois le point de
+    vente déjà identifié par find_client_pdv_by_email)."""
+    for pdv in mappings.get("points_de_vente", []):
+        if pdv.get("code") == code_pdv:
+            return pdv
     return None
 
 

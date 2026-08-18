@@ -16,7 +16,7 @@ from openpyxl import Workbook
 from core.client_store import CLIENTS_DIR, create_client
 from core.email_poller import traiter_client
 from core.history_store import list_history
-from core.mapping_store import DEFAULT_MAPPINGS, save_mappings, set_pdv_adresse_email
+from core.mapping_store import DEFAULT_MAPPINGS, load_mappings, save_mappings, set_pdv_adresse_email
 
 
 @pytest.fixture(autouse=True)
@@ -116,6 +116,31 @@ def test_mail_avec_adresse_connue_convertit_et_repond():
     assert len(historique) == 1
     assert historique[0]["statut"] == "OK"
     assert historique[0]["point_de_vente"] == "REST"
+
+
+def test_mail_avec_adresse_resultat_configuree_repond_a_cette_adresse():
+    # adresse_resultat renseignée sur le point de vente : le résultat doit
+    # partir vers elle, pas vers l'adresse de réception d'origine.
+    client = _client_pret("rest@client.example.com")
+    m = load_mappings(client["id"])
+    for pdv in m["points_de_vente"]:
+        if pdv["code"] == "REST":
+            pdv["adresse_resultat"] = "compta@client.example.com"
+    save_mappings(client["id"], m)
+
+    graph = FakeGraph()
+    graph.messages.append(
+        {
+            "id": "m1",
+            "toRecipients": [{"emailAddress": {"address": "rest@client.example.com"}}],
+            "attachments": [("client_rest_business_export_accounting_20260810_20260811.xlsx", _build_sample_xlsx())],
+        }
+    )
+
+    traiter_client(graph, client)
+
+    assert len(graph.sent) == 1
+    assert graph.sent[0]["to_addresses"] == ["compta@client.example.com"]
 
 
 def test_mail_avec_adresse_inconnue_alerte_sans_convertir():

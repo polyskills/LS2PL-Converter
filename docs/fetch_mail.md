@@ -55,7 +55,10 @@ Pour chaque client ayant un tenant + une boîte mail configurés :
      (`core.lightspeed_parser` → `core.converter` → `core.pennylane_export`) ;
    - la tentative est **archivée dans l'historique** du client, succès ou
      échec ;
-   - succès → réponse avec fichier source + CSV généré et un récapitulatif ;
+   - succès → réponse avec fichier source + CSV généré et un récapitulatif,
+     envoyée à l'adresse **résultat** du point de vente si elle est
+     configurée (champ `adresse_resultat`, page Table de correspondance),
+     sinon à l'adresse de réception d'origine (comportement par défaut) ;
    - échec (mapping manquant, fichier illisible...) → **alerte interne
      uniquement**, jamais de fichier erroné envoyé au client ;
 3. le mail source est marqué lu.

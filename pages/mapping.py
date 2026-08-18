@@ -117,13 +117,18 @@ mappings = load_mappings(client_id)
 with tab_pdv:
     st.markdown(
         "Liste des points de vente (sites, salles, activités...) rencontrés dans les exports LightSpeed. "
-        "L'**adresse mail** est optionnelle : si elle est renseignée, tout export LightSpeed reçu "
+        "L'**adresse mail de réception** est optionnelle : si elle est renseignée, tout export LightSpeed reçu "
         "automatiquement à cette adresse sera rattaché à ce point de vente (voir la moulinette de "
-        "réception automatique). Elle doit être unique entre tous les clients."
+        "réception automatique). Elle doit être unique entre tous les clients. "
+        "L'**adresse mail de résultat** est optionnelle elle aussi : par défaut, le CSV Pennylane et le "
+        "récapitulatif sont renvoyés à l'adresse de réception (celle qui a reçu l'export) ; renseignez-la "
+        "pour les envoyer ailleurs à la place (ex. la comptable, une adresse de suivi dédiée...)."
     )
     edited_pdv_df = st.data_editor(
         _as_editable_df(
-            mappings.get("points_de_vente", []), ["code", "libelle", "adresse_email", "commentaires"], tri="code"
+            mappings.get("points_de_vente", []),
+            ["code", "libelle", "adresse_email", "adresse_resultat", "commentaires"],
+            tri="code",
         ),
         num_rows="dynamic",
         use_container_width=True,
@@ -134,6 +139,11 @@ with tab_pdv:
             "adresse_email": st.column_config.TextColumn(
                 "Adresse mail de réception (optionnelle)",
                 help="Adresse dédiée qui reçoit l'export automatique LightSpeed de ce point de vente.",
+            ),
+            "adresse_resultat": st.column_config.TextColumn(
+                "Adresse mail de résultat (optionnelle)",
+                help="Destinataire du CSV Pennylane et du récapitulatif après conversion automatique. "
+                "Laisser vide pour répondre à l'adresse de réception (comportement par défaut).",
             ),
             "commentaires": st.column_config.TextColumn("Commentaires"),
         },

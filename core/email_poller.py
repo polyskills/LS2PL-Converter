@@ -11,9 +11,11 @@ Clients), et pour chaque mail non lu avec pièce jointe dans cette boîte :
 3. adresse connue -> parse + convertit avec le référentiel du client
    identifié, exactement le même pipeline que l'import manuel (app.py) ;
 4. archive la tentative dans l'historique du client, succès ou échec ;
-5. répond : succès -> fichiers + récapitulatif à l'adresse d'origine ;
-   échec (mapping manquant...) -> alerte interne avec le détail, jamais
-   envoyée au client (cohérent avec le blocage strict déjà en place ailleurs) ;
+5. répond : succès -> fichiers + récapitulatif à l'adresse « résultat » du
+   point de vente si elle est configurée (Table de correspondance), sinon à
+   l'adresse d'origine ; échec (mapping manquant...) -> alerte interne avec
+   le détail, jamais envoyée au client (cohérent avec le blocage strict déjà
+   en place ailleurs) ;
 6. marque le mail source comme lu.
 
 Ce module ne dépend d'aucun SDK Graph concret : `graph` n'importe quoi
@@ -30,7 +32,7 @@ from core.converter import convert
 from core.email_ingest import EmailIngestError, identifier_source
 from core.history_store import record_conversion
 from core.lightspeed_parser import LightspeedParseError, parse_lightspeed_export
-from core.mapping_store import load_mappings
+from core.mapping_store import find_pdv, load_mappings
 from core.pennylane_export import build_pennylane_csv
 from core.timezone import now_local
 
@@ -119,7 +121,12 @@ def _traiter_piece_jointe(graph, mailbox: str, adresse_cible: str | None, filena
     record_conversion(source.client_id, res, raw, csv_bytes, horodatage)
 
     if res.sans_erreur:
-        _envoyer_resultat(graph, mailbox, adresse_cible, source, res, raw, csv_bytes)
+        # adresse_resultat (Table de correspondance > Points de vente) permet de renvoyer
+        # ailleurs qu'à l'adresse de réception (ex. la comptable plutôt que la boîte
+        # partagée elle-même) ; vide par défaut -> comportement historique inchangé.
+        pdv = find_pdv(mappings, source.code_pdv)
+        adresse_resultat = ((pdv or {}).get("adresse_resultat") or "").strip() or adresse_cible
+        _envoyer_resultat(graph, mailbox, adresse_resultat, source, res, raw, csv_bytes)
     else:
         detail = "\n".join(res.erreurs)
         if source.avertissement:
@@ -131,7 +138,7 @@ def _traiter_piece_jointe(graph, mailbox: str, adresse_cible: str | None, filena
         )
 
 
-def _envoyer_resultat(graph, mailbox, adresse_cible, source, res, raw: bytes, csv_bytes: bytes) -> None:
+def _envoyer_resultat(graph, mailbox, adresse_resultat, source, res, raw: bytes, csv_bytes: bytes) -> None:
     corps = (
         f"<p>Conversion automatique effectuée pour <b>{source.client_id} / {source.code_pdv}</b> "
         f"({source.date_debut or '?'} → {source.date_fin or '?'}).</p>"
@@ -146,11 +153,10 @@ def _envoyer_resultat(graph, mailbox, adresse_cible, source, res, raw: bytes, cs
         mailbox,
         subject=f"Conversion LightSpeed → Pennylane — {source.client_id}/{source.code_pdv} — {source.date_debut or ''}",
         body_html=corps,
-        # À l'adresse d'origine (celle qui a reçu l'export LightSpeed), pas à
-        # l'alerte interne — cf. docstring du module : "succès -> fichiers +
-        # récapitulatif à l'adresse d'origine". `adresse_cible` est garanti non
-        # vide ici (sinon EmailIngestError levée plus haut, avant cet appel).
-        to_addresses=[adresse_cible],
+        # adresse_resultat = adresse_resultat du point de vente (Table de correspondance)
+        # si renseignée, sinon l'adresse de réception d'origine (fallback résolu par
+        # l'appelant, jamais l'alerte interne) — cf. docstring du module.
+        to_addresses=[adresse_resultat],
         attachments=[(res.source_filename, raw), (f"import_pennylane_{res.point_de_vente}.csv", csv_bytes)],
     )
 
