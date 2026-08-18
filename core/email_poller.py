@@ -221,6 +221,21 @@ def _adresses_resultat(pdv: dict | None, repli: str) -> list[str]:
     return adresses or [repli]
 
 
+def _pied_de_page_lien_app() -> str:
+    """Petit pied de page HTML pointant vers l'application (URL renseignée
+    page Réglages > Informations), ajouté aux mails de conversion réussie
+    pour s'y rendre en un clic (ex. consulter l'historique). Vide si l'URL
+    n'est pas configurée — pas de mention à la place, pour ne pas alourdir
+    le mail d'un texte sans lien cliquable."""
+    url_app = get_url_app()
+    if not url_app:
+        return ""
+    return (
+        f'<hr style="border:none;border-top:1px solid #ddd;margin:16px 0;">'
+        f'<p style="color:#666;font-size:0.9em;">Application LS2PL : <a href="{url_app}">{url_app}</a></p>'
+    )
+
+
 def _envoyer_resultat(graph, mailbox, adresses_resultat, source, res, raw: bytes, csv_bytes: bytes) -> None:
     corps = (
         f"<p>Conversion automatique effectuée pour <b>{source.client_id} / {source.code_pdv}</b> "
@@ -231,6 +246,7 @@ def _envoyer_resultat(graph, mailbox, adresses_resultat, source, res, raw: bytes
         f"<li>Total TTC : {res.ttc_source:,.2f} €</li>"
         f"</ul>"
         + (f"<p>⚠️ {len(res.avertissements)} avertissement(s) — voir l'historique de l'application.</p>" if res.avertissements else "")
+        + _pied_de_page_lien_app()
     )
     graph.send_mail(
         mailbox,

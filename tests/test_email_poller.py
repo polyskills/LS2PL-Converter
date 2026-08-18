@@ -367,3 +367,41 @@ def test_notification_echec_inclut_un_lien_si_url_app_configuree():
 
     client_notif = next(m for m in graph.sent if m["to_addresses"] == ["rest@client.example.com"])
     assert "https://ls2pl-test.streamlit.app/historique" in client_notif["body_html"]
+
+
+def test_mail_de_succes_inclut_le_lien_app_en_pied_de_page():
+    from core.app_config import set_url_app
+
+    client = _client_pret("rest@client.example.com")
+    graph = FakeGraph()
+    graph.messages.append(
+        {
+            "id": "m1",
+            "toRecipients": [{"emailAddress": {"address": "rest@client.example.com"}}],
+            "attachments": [("client_rest_business_export_accounting_20260810_20260811.xlsx", _build_sample_xlsx())],
+        }
+    )
+
+    set_url_app("https://ls2pl-test.streamlit.app")
+    try:
+        traiter_client(graph, client)
+    finally:
+        set_url_app("")
+
+    assert "https://ls2pl-test.streamlit.app" in graph.sent[0]["body_html"]
+
+
+def test_mail_de_succes_sans_pied_de_page_si_url_app_non_configuree():
+    client = _client_pret("rest@client.example.com")
+    graph = FakeGraph()
+    graph.messages.append(
+        {
+            "id": "m1",
+            "toRecipients": [{"emailAddress": {"address": "rest@client.example.com"}}],
+            "attachments": [("client_rest_business_export_accounting_20260810_20260811.xlsx", _build_sample_xlsx())],
+        }
+    )
+
+    traiter_client(graph, client)
+
+    assert "http" not in graph.sent[0]["body_html"]
