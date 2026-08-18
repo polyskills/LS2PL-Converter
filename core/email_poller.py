@@ -30,10 +30,12 @@ faux client, sans réseau ni tenant Azure réel.
 from __future__ import annotations
 
 import email.utils
+import html
 import logging
 import os
 import re
 
+from core.app_config import get_url_app
 from core.client_store import list_clients
 from core.converter import convert
 from core.email_ingest import EmailIngestError, identifier_source
@@ -140,7 +142,7 @@ def _traiter_piece_jointe(graph, mailbox: str, adresses_candidates: list[str], f
         _notifier_echec_client(
             graph, mailbox, adresses_candidates,
             sujet="Échec de traitement automatique de votre export LightSpeed",
-            detail=detail,
+            filename=filename, detail=detail,
         )
         return
 
@@ -152,6 +154,7 @@ def _traiter_piece_jointe(graph, mailbox: str, adresses_candidates: list[str], f
     # Plusieurs destinataires possibles, séparés par une virgule ou un point-virgule.
     # Sert à la fois pour le résultat (succès) et la notification d'échec.
     adresses_notification = _adresses_resultat(pdv, repli=adresse_cible)
+    periode = f"{source.date_debut or '?'} → {source.date_fin or '?'}"
 
     try:
         export = parse_lightspeed_export(raw, filename)
@@ -165,7 +168,7 @@ def _traiter_piece_jointe(graph, mailbox: str, adresses_candidates: list[str], f
         _notifier_echec_client(
             graph, mailbox, adresses_notification,
             sujet=f"Échec de traitement de votre export LightSpeed — {source.code_pdv}",
-            detail=detail,
+            filename=filename, detail=detail, point_de_vente=source.code_pdv, periode=periode,
         )
         return
 
@@ -202,7 +205,7 @@ def _traiter_piece_jointe(graph, mailbox: str, adresses_candidates: list[str], f
         _notifier_echec_client(
             graph, mailbox, adresses_notification,
             sujet=f"Échec de conversion de votre export LightSpeed — {source.code_pdv}",
-            detail=detail,
+            filename=filename, detail=detail, point_de_vente=source.code_pdv, periode=periode,
         )
 
 
@@ -242,7 +245,42 @@ def _envoyer_resultat(graph, mailbox, adresses_resultat, source, res, raw: bytes
     )
 
 
-def _notifier_echec_client(graph, mailbox, destinataires: list[str], sujet: str, detail: str) -> None:
+def _corps_notification_echec(
+    filename: str, detail: str, point_de_vente: str | None = None, periode: str | None = None
+) -> str:
+    """Corps HTML du mail de notification d'échec envoyé côté client : le
+    contexte (point de vente/période si connus, nom du fichier), le motif
+    exact de l'échec, puis une invitation à vérifier/corriger et relancer une
+    conversion manuelle, avec un lien direct vers l'historique si l'URL de
+    l'application est renseignée (page Réglages > Informations)."""
+    contexte = f"point de vente {point_de_vente}" if point_de_vente else "un point de vente non identifié"
+    if periode:
+        contexte += f", période {periode}"
+
+    detail_html = html.escape(detail).replace("\n", "<br>")
+
+    url_app = get_url_app()
+    lien = f"{url_app}/historique" if url_app else None
+    invitation = (
+        f'rendez-vous sur <a href="{lien}">{lien}</a>' if lien
+        else "rendez-vous sur la page « Historique » de l'application"
+    )
+
+    return (
+        f"<p>Signalement d'un échec avec l'export du <b>{contexte}</b>, "
+        f"dont le nom de fichier est <code>{html.escape(filename)}</code>.</p>"
+        f"<p><b>Erreur :</b><br>{detail_html}</p>"
+        f"<p>Pour vérifier l'historique et effectuer les corrections nécessaires (référentiel, "
+        f"table de correspondance...) avant de relancer une conversion manuelle avec ce même "
+        f"fichier, {invitation} (sélectionnez le client concerné dans le menu, page Convertisseur "
+        f"pour réimporter).</p>"
+    )
+
+
+def _notifier_echec_client(
+    graph, mailbox, destinataires: list[str], sujet: str, filename: str, detail: str,
+    point_de_vente: str | None = None, periode: str | None = None,
+) -> None:
     """Notifie, en plus de l'alerte interne (_alerter), le(s) destinataire(s)
     côté client concerné(s) par un échec — y compris quand l'adresse
     destinataire elle-même n'est pas reconnue (ex. une entrée modifiée par
@@ -250,14 +288,15 @@ def _notifier_echec_client(graph, mailbox, destinataires: list[str], sujet: str,
     saurait, à condition d'avoir configuré LSPENNYLANE_ALERTE_INTERNE, sans
     jamais remonter jusqu'à qui pourrait corriger le référentiel. Aucun
     fichier joint ici (contrairement à _envoyer_resultat) : uniquement le
-    motif de l'échec, en clair."""
+    motif de l'échec, en clair, et une invitation à corriger puis relancer
+    manuellement (cf. _corps_notification_echec)."""
     destinataires = [a for a in dict.fromkeys(destinataires) if a]  # dédoublonne, préserve l'ordre
     if not destinataires:
         return
     graph.send_mail(
         mailbox,
         subject=f"[LS2PL] {sujet}",
-        body_html=f"<p>{detail}</p>",
+        body_html=_corps_notification_echec(filename, detail, point_de_vente, periode),
         to_addresses=destinataires,
     )
 

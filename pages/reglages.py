@@ -10,7 +10,7 @@ import json
 
 import streamlit as st
 
-from core.app_config import get_footer_sidebar, set_footer_sidebar
+from core.app_config import get_footer_sidebar, get_url_app, set_footer_sidebar, set_url_app
 from core.client_store import get_client, rename_client, set_email_config
 from core.mapping_store import load_mappings, save_mappings
 from core.timezone import now_local
@@ -252,3 +252,20 @@ with tab_infos:
         st.rerun()
     if st.session_state.pop("_footer_enregistre", None):
         st.success("✅ Pied de page enregistré.")
+
+    st.divider()
+    st.subheader("🔗 URL publique de l'application")
+    st.caption(
+        "Adresse à laquelle l'application est accessible (ex. `https://xxx.streamlit.app`), réglage "
+        "global. Utilisée pour construire un lien direct vers la page **Historique** dans les mails "
+        "de notification d'échec du fetch automatique — laisser vide pour un simple rappel textuel, "
+        "sans lien cliquable."
+    )
+    url_actuelle = get_url_app()
+    nouvelle_url = st.text_input("URL de l'application", value=url_actuelle, placeholder="https://xxx.streamlit.app")
+    if st.button("💾 Enregistrer l'URL"):
+        set_url_app(nouvelle_url)
+        st.session_state["_url_app_enregistree"] = True
+        st.rerun()
+    if st.session_state.pop("_url_app_enregistree", None):
+        st.success("✅ URL enregistrée.")

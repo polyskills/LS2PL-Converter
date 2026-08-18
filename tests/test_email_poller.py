@@ -13,17 +13,24 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytest
 from openpyxl import Workbook
 
+from core.app_config import APP_CONFIG_PATH
 from core.client_store import CLIENTS_DIR, create_client
 from core.email_poller import traiter_client
 from core.history_store import list_history
 from core.mapping_store import DEFAULT_MAPPINGS, load_mappings, save_mappings, set_pdv_adresse_email
 
 
+def _clean():
+    shutil.rmtree(CLIENTS_DIR, ignore_errors=True)
+    if os.path.exists(APP_CONFIG_PATH):
+        os.remove(APP_CONFIG_PATH)
+
+
 @pytest.fixture(autouse=True)
 def _clean_clients_dir():
-    shutil.rmtree(CLIENTS_DIR, ignore_errors=True)
+    _clean()
     yield
-    shutil.rmtree(CLIENTS_DIR, ignore_errors=True)
+    _clean()
 
 
 def _build_sample_xlsx() -> bytes:
@@ -291,8 +298,42 @@ def test_mail_avec_mapping_manquant_alerte_en_interne_et_le_client():
     assert "Échec de conversion" in interne["subject"]
     client_notif = next(m for m in graph.sent if m["to_addresses"] == ["rest@client.example.com"])
     assert "Échec" in client_notif["subject"]
+    corps = client_notif["body_html"]
+    assert "client_rest_business_export_accounting_20260810_20260811.xlsx" in corps  # nom de fichier
+    assert "REST" in corps  # point de vente
+    assert "Comptes de vente" in corps or "compte" in corps.lower()  # motif de l'échec repris
+    assert "Historique" in corps  # invitation à s'y rendre pour corriger et relancer
 
     historique = list_history(client["id"])
     assert len(historique) == 1
     assert historique[0]["statut"] == "ERREUR"  # archivé même en échec
     assert historique[0]["destinataires_email"] == ["rest@client.example.com"]
+
+
+def test_notification_echec_inclut_un_lien_si_url_app_configuree():
+    from core.app_config import set_url_app
+
+    client = create_client("Test Poller Lien")
+    set_pdv_adresse_email(client["id"], "REST", "rest@client.example.com")
+    from core.mapping_store import EMPTY_MAPPINGS
+    save_mappings(client["id"], {**EMPTY_MAPPINGS, "points_de_vente": [{"code": "REST", "libelle": "REST", "adresse_email": "rest@client.example.com"}]})
+    client["email_tenant_id"] = "tenant-test"
+    client["email_mailbox"] = "boite@client.example.com"
+
+    graph = FakeGraph()
+    graph.messages.append(
+        {
+            "id": "m1",
+            "toRecipients": [{"emailAddress": {"address": "rest@client.example.com"}}],
+            "attachments": [("client_rest_business_export_accounting_20260810_20260811.xlsx", _build_sample_xlsx())],
+        }
+    )
+
+    set_url_app("https://ls2pl-test.streamlit.app")
+    try:
+        traiter_client(graph, client)
+    finally:
+        set_url_app("")
+
+    client_notif = next(m for m in graph.sent if m["to_addresses"] == ["rest@client.example.com"])
+    assert "https://ls2pl-test.streamlit.app/historique" in client_notif["body_html"]

@@ -1,8 +1,9 @@
 """
 Réglages globaux de l'application, communs à tous les clients (à la
 différence de core.mapping_store, propre à chacun) : persistés dans
-data/app_config.json. Pour l'instant, uniquement le texte de pied de page
-du menu latéral.
+data/app_config.json. Le texte de pied de page du menu latéral, et l'URL
+publique de l'application (utilisée dans les mails de notification d'échec
+du fetch automatique, pour renvoyer vers l'historique).
 """
 from __future__ import annotations
 
@@ -14,6 +15,7 @@ APP_CONFIG_PATH = os.path.join(BASE_DIR, "data", "app_config.json")
 
 DEFAULT_APP_CONFIG = {
     "footer_sidebar": "© Polyskills - 2026",
+    "url_app": "",
 }
 
 
@@ -40,4 +42,18 @@ def get_footer_sidebar() -> str:
 def set_footer_sidebar(texte: str) -> None:
     config = get_app_config()
     config["footer_sidebar"] = texte
+    save_app_config(config)
+
+
+def get_url_app() -> str:
+    """URL publique de l'application (ex. https://xxx.streamlit.app), sans
+    slash final. Vide si non renseignée : les mails de notification d'échec
+    du fetch automatique renvoient alors vers l'app en toutes lettres, sans
+    lien cliquable."""
+    return (get_app_config().get("url_app") or "").rstrip("/")
+
+
+def set_url_app(url: str) -> None:
+    config = get_app_config()
+    config["url_app"] = url.strip().rstrip("/")
     save_app_config(config)
