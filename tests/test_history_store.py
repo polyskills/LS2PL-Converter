@@ -12,6 +12,7 @@ from core.client_store import CLIENTS_DIR, create_client
 from core.converter import ConversionResult
 from core.history_store import (
     MAX_HISTORIQUE_CONVERSIONS,
+    echecs_apres_derniere_reussite,
     jours_depuis_derniere_conversion_reussie,
     list_history,
     record_conversion,
@@ -97,3 +98,30 @@ def test_jours_depuis_derniere_conversion_reussie_aujourdhui():
     aujourdhui = now_local().strftime("%Y-%m-%d")
     entries = [{"statut": "OK", "horodatage": f"{aujourdhui} 09:00:00"}]
     assert jours_depuis_derniere_conversion_reussie(entries) == 0
+
+
+def test_echecs_apres_derniere_reussite_signale_un_echec_plus_recent():
+    # Scénario du bug rapporté : succès à 14:15:35, échec juste après à 14:15:36
+    # (même jour) — jours_depuis_derniere_conversion_reussie affiche "aujourd'hui"
+    # en vert, ce qui serait trompeur seul : echecs_apres_derniere_reussite doit
+    # remonter cet échec plus récent malgré le succès du jour même.
+    entries = [
+        {"statut": "ERREUR", "horodatage": "2026-08-18 14:15:36", "point_de_vente": "RESTAURANT"},
+        {"statut": "OK", "horodatage": "2026-08-18 14:15:35", "point_de_vente": "RESTAURANT"},
+    ]
+    echecs = echecs_apres_derniere_reussite(entries)
+    assert len(echecs) == 1
+    assert echecs[0]["horodatage"] == "2026-08-18 14:15:36"
+
+
+def test_echecs_apres_derniere_reussite_ignore_les_echecs_anterieurs():
+    entries = [
+        {"statut": "OK", "horodatage": "2026-08-18 14:15:35", "point_de_vente": "RESTAURANT"},
+        {"statut": "ERREUR", "horodatage": "2026-08-17 09:00:00", "point_de_vente": "RESTAURANT"},
+    ]
+    assert echecs_apres_derniere_reussite(entries) == []
+
+
+def test_echecs_apres_derniere_reussite_sans_aucune_reussite():
+    entries = [{"statut": "ERREUR", "horodatage": "2026-08-18 14:15:36", "point_de_vente": "RESTAURANT"}]
+    assert len(echecs_apres_derniere_reussite(entries)) == 1

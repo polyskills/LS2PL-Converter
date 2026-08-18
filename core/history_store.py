@@ -169,3 +169,25 @@ def jours_depuis_derniere_conversion_reussie(entries: list[dict]) -> int | None:
             continue
         return (now_local().date() - derniere).days
     return None
+
+
+def echecs_apres_derniere_reussite(entries: list[dict]) -> list[dict]:
+    """Tentatives en échec (statut ERREUR) survenues depuis la dernière
+    conversion réussie (ou toutes les tentatives en échec présentes si
+    aucune réussite dans l'historique conservé). Complète
+    jours_depuis_derniere_conversion_reussie : une conversion réussie
+    aujourd'hui ne veut pas dire que TOUT va bien si une tentative plus
+    récente encore a échoué entre-temps (plusieurs cycles par jour) — sans ce
+    signal séparé, l'alerte "dernière conversion réussie : aujourd'hui"
+    donnerait à tort une impression de succès complet.
+
+    `entries` est attendu trié par horodatage décroissant (cf. list_history)."""
+    horodatage_derniere_reussite = next(
+        (e.get("horodatage", "") for e in entries if e.get("statut") == "OK"), None
+    )
+    if horodatage_derniere_reussite is None:
+        return [e for e in entries if e.get("statut") == "ERREUR"]
+    return [
+        e for e in entries
+        if e.get("statut") == "ERREUR" and e.get("horodatage", "") > horodatage_derniere_reussite
+    ]

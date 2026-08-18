@@ -11,7 +11,12 @@ import os
 
 import streamlit as st
 
-from core.history_store import MAX_HISTORIQUE_CONVERSIONS, jours_depuis_derniere_conversion_reussie, list_history
+from core.history_store import (
+    MAX_HISTORIQUE_CONVERSIONS,
+    echecs_apres_derniere_reussite,
+    jours_depuis_derniere_conversion_reussie,
+    list_history,
+)
 from core.ui_common import select_client
 
 client_id = select_client()
@@ -43,7 +48,17 @@ filtre_statut = c2.multiselect(
 filtered = [e for e in entries if e["point_de_vente"] in filtre_pdv and e["statut"] in filtre_statut]
 
 st.divider()
-st.subheader("⚠️ Dernière conversion réussie")
+st.subheader("⚠️ État du fetch automatique")
+
+echecs_recents = echecs_apres_derniere_reussite(entries)
+if echecs_recents:
+    plus_recent = echecs_recents[0]
+    st.error(
+        f"❌ {len(echecs_recents)} tentative(s) en échec depuis la dernière conversion réussie — "
+        f"la plus récente : {plus_recent['horodatage']} ({plus_recent['point_de_vente']}). "
+        "Voir le détail dans la liste ci-dessous."
+    )
+
 jours = jours_depuis_derniere_conversion_reussie(entries)
 if jours is None:
     st.warning(
