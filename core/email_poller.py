@@ -25,6 +25,7 @@ faux client, sans réseau ni tenant Azure réel.
 """
 from __future__ import annotations
 
+import logging
 import os
 
 from core.client_store import list_clients
@@ -35,6 +36,8 @@ from core.lightspeed_parser import LightspeedParseError, parse_lightspeed_export
 from core.mapping_store import find_pdv, load_mappings
 from core.pennylane_export import build_pennylane_csv
 from core.timezone import now_local
+
+log = logging.getLogger(__name__)
 
 SUPPORTED_EXTENSIONS = (".xls", ".xlsx", ".csv")
 
@@ -164,7 +167,11 @@ def _envoyer_resultat(graph, mailbox, adresse_resultat, source, res, raw: bytes,
 def _alerter(graph, mailbox: str, sujet: str, detail: str) -> None:
     destinataire = _adresse_alerte_interne()
     if not destinataire:
-        return  # aucune adresse d'alerte configurée : rien à envoyer, l'historique/les logs font foi
+        # Aucune adresse d'alerte configurée (LSPENNYLANE_ALERTE_INTERNE absente) :
+        # rien à envoyer, mais un log explicite évite un échec complètement
+        # silencieux (ni mail, ni trace) en test local sans cette variable.
+        log.warning("[Alerte fetch LightSpeed] %s — %s", sujet, detail)
+        return
     graph.send_mail(
         mailbox,
         subject=f"[Alerte fetch LightSpeed] {sujet}",

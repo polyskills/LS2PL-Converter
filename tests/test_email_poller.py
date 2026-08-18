@@ -167,6 +167,28 @@ def test_mail_avec_adresse_inconnue_alerte_sans_convertir():
     assert list_history(client["id"]) == []  # rien archivé : jamais entré dans le pipeline de conversion
 
 
+def test_mail_avec_adresse_inconnue_sans_alerte_interne_configuree_log_quand_meme(caplog):
+    # Sans LSPENNYLANE_ALERTE_INTERNE (cas d'un test local, ex. sur le Mac de
+    # Matthieu), le mail ne doit plus échouer en silence complet : au moins
+    # un log doit tracer le motif, à défaut d'un mail d'alerte envoyable.
+    client = _client_pret("rest@client.example.com")
+    graph = FakeGraph()
+    graph.messages.append(
+        {
+            "id": "m1",
+            "toRecipients": [{"emailAddress": {"address": "adresse-non-configuree@client.example.com"}}],
+            "attachments": [("mystere_business_export_accounting_20260810_20260811.xlsx", _build_sample_xlsx())],
+        }
+    )
+
+    with caplog.at_level("WARNING"):
+        traiter_client(graph, client)
+
+    assert graph.marked_read == ["m1"]
+    assert graph.sent == []  # aucune adresse pour envoyer un vrai mail
+    assert any("non rattachée" in r.message for r in caplog.records)
+
+
 def test_mail_avec_mapping_manquant_alerte_en_interne_jamais_au_client():
     # Point de vente REST rattaché à l'adresse, mais référentiel vide : la
     # conversion doit échouer proprement plutôt que d'envoyer un CSV faux au client.
