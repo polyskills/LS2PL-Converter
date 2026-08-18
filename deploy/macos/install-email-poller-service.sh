@@ -7,13 +7,18 @@
 # A exécuter avec sudo, depuis la RACINE du dépôt cloné, APRES
 # install-service.sh (réutilise le même environnement virtuel).
 #
-# Contrairement à Windows (variables d'environnement "Machine"), macOS n'a
-# pas d'équivalent simple pour un LaunchDaemon : les secrets sont donc passés
-# en paramètres du script, qui les écrit dans le plist du service (fichier
-# lisible par root uniquement, cf. chmod 600 plus bas).
+# --azure-client-id/--azure-client-secret sont optionnels : ils ne servent
+# que de repli GLOBAL pour un client sans identifiants Azure propres
+# renseignés dans LS2PL (page Réglages > Gestion Email, recommandé — un jeu
+# d'identifiants par client, cf. docs/configuration_m365_client.md). Si tous
+# les clients ont leurs propres identifiants, ces deux options peuvent être
+# omises. Contrairement à Windows (variables d'environnement "Machine"),
+# macOS n'a pas d'équivalent simple pour un LaunchDaemon : ce repli est donc
+# passé en paramètre du script, qui l'écrit dans le plist du service
+# (fichier lisible par root uniquement, cf. chmod 600 plus bas).
 #
 # Le tenant M365 et la boîte mail à interroger se configurent, eux, par
-# client dans l'application (page Clients) — pas via ce script.
+# client dans l'application (page Réglages) — pas via ce script.
 #
 # Exemple :
 #   sudo ./deploy/macos/install-email-poller-service.sh \
@@ -45,8 +50,9 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 if [ -z "$AZURE_CLIENT_ID" ] || [ -z "$AZURE_CLIENT_SECRET" ]; then
-    echo "Paramètres requis manquants : --azure-client-id et --azure-client-secret." >&2
-    exit 1
+    echo "⚠️  --azure-client-id/--azure-client-secret non fournis : aucun repli global." >&2
+    echo "    Seuls les clients avec leurs propres identifiants Azure (LS2PL > Réglages" >&2
+    echo "    > Gestion Email) seront traités par le fetch automatique." >&2
 fi
 
 REAL_USER="${SUDO_USER:-$(id -un)}"

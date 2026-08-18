@@ -6,19 +6,28 @@ Boucle infinie : un cycle (core.email_poller.executer_un_cycle) toutes les
 tourner comme second service, indépendant de l'app Streamlit
 (voir deploy/windows ou deploy/macos selon l'OS d'hébergement).
 
-Variables d'environnement requises :
-- LSPENNYLANE_AZURE_CLIENT_ID     : ID d'application de l'app Azure AD créée
-                                     dans le tenant M365 du client (voir
-                                     docs/configuration_m365_client.md)
-- LSPENNYLANE_AZURE_CLIENT_SECRET : Secret client de cette app
+L'ID d'application et le secret client Azure AD peuvent être renseignés soit
+par client (page Réglages > Gestion Email, prioritaire — recommandé depuis
+qu'une app Azure AD est créée par client, cf.
+docs/configuration_m365_client.md), soit via les variables d'environnement
+ci-dessous, utilisées en repli pour tout client sans identifiants propres
+(comportement historique, ne fonctionne que tant qu'un seul client les
+utilise sur ce serveur) :
+- LSPENNYLANE_AZURE_CLIENT_ID
+- LSPENNYLANE_AZURE_CLIENT_SECRET
+Aucune des deux n'est donc strictement requise au démarrage du service :
+un client sans identifiant disponible (ni propre, ni en repli) est
+simplement ignoré à chaque cycle (log d'avertissement), sans bloquer les
+autres.
+
 Optionnelle :
 - LSPENNYLANE_ALERTE_INTERNE      : adresse mail recevant les alertes et les
                                      récapitulatifs de conversion (aucun envoi
                                      si absente)
 - LSPENNYLANE_POLL_INTERVAL_SECONDS : intervalle entre deux cycles (défaut 300)
 
-Le tenant et la boîte mail à interroger sont, eux, configurés par client
-dans l'application (page Clients), pas ici.
+Le tenant et la boîte mail à interroger sont, eux, toujours configurés par
+client dans l'application (page Réglages), pas ici.
 """
 from __future__ import annotations
 
@@ -37,10 +46,6 @@ log = logging.getLogger("email_poller")
 
 
 def main() -> None:
-    for var in ("LSPENNYLANE_AZURE_CLIENT_ID", "LSPENNYLANE_AZURE_CLIENT_SECRET"):
-        if not os.environ.get(var):
-            raise SystemExit(f"Variable d'environnement manquante : {var}")
-
     interval = int(os.environ.get("LSPENNYLANE_POLL_INTERVAL_SECONDS", "300"))
     ensure_defaults()
 

@@ -11,7 +11,7 @@ import json
 import streamlit as st
 
 from core.app_config import get_footer_sidebar, get_url_app, set_footer_sidebar, set_url_app
-from core.client_store import get_client, rename_client, set_email_config
+from core.client_store import get_client, rename_client, set_azure_credentials, set_email_config
 from core.mapping_store import load_mappings, save_mappings
 from core.timezone import now_local
 from core.ui_common import render_infos_techniques, select_client
@@ -78,17 +78,17 @@ with tab_email:
     st.subheader("Réception automatique des exports LightSpeed par mail")
     st.caption(
         "La boîte mail vit dans le tenant M365 du client. Une adresse dédiée par point de vente se "
-        "paramètre dans « Table de correspondance » ; ici, uniquement le tenant et la boîte mail à "
-        "interroger. Laisser vide désactive le fetch automatique pour ce client. "
-        "Voir `deploy/windows/README.md` ou `deploy/macos/README.md` (selon l'OS d'hébergement) pour la mise en "
-        "place complète (app Azure AD, consentement admin, service)."
+        "paramètre dans « Table de correspondance » ; ici, le tenant, la boîte mail à interroger, et "
+        "l'app Azure AD créée dans ce tenant. Laisser le tenant/la boîte vides désactive le fetch "
+        "automatique pour ce client. Voir `docs/configuration_m365_client.md` pour la mise en place "
+        "complète côté client (création de l'app, consentement admin), et `deploy/windows/README.md` "
+        "ou `deploy/macos/README.md` pour le service d'hébergement."
     )
     ce1, ce2 = st.columns(2)
     tenant_id = ce1.text_input(
         "Tenant ID Azure AD du client",
         value=client.get("email_tenant_id", ""),
-        help="Identifiant du tenant M365 du client (Entra ID > Vue d'ensemble). "
-        "Nécessite le consentement admin du client sur l'app Azure AD Polyskills.",
+        help="Identifiant du tenant M365 du client (Entra ID > Vue d'ensemble).",
     )
     mailbox = ce2.text_input(
         "Boîte mail à interroger (UPN)",
@@ -102,14 +102,40 @@ with tab_email:
     if st.session_state.pop("_config_mail_enregistree", None):
         st.success("✅ Config mail enregistrée.")
 
+    st.divider()
+    st.markdown("**App Azure AD de ce client**")
+    st.caption(
+        "ID d'application et secret client de l'app Azure AD créée dans le tenant de ce client "
+        "(étape 0 de `docs/configuration_m365_client.md`), nécessaires pour que le fetch automatique "
+        "(service `email_poller.py` ou bouton « Relever les mails maintenant » page Convertisseur) "
+        "obtienne un jeton Microsoft Graph. Laisser vide pour retomber sur les variables "
+        "d'environnement globales du serveur (`LSPENNYLANE_AZURE_CLIENT_ID`/`_SECRET`, historique — "
+        "ne fonctionne que pour un seul client à la fois). ⚠️ Enregistrés **en clair** sur le disque, "
+        "comme le reste du référentiel : quiconque a accès au serveur peut les lire."
+    )
+    ca1, ca2 = st.columns(2)
+    azure_client_id = ca1.text_input("ID d'application (Client ID)", value=client.get("azure_client_id", ""))
+    azure_client_secret = ca2.text_input(
+        "Secret client (Client Secret)", value=client.get("azure_client_secret", ""), type="password"
+    )
+    if st.button("💾 Enregistrer les identifiants Azure"):
+        set_azure_credentials(client_id, azure_client_id, azure_client_secret)
+        st.session_state["_identifiants_azure_enregistres"] = True
+        st.rerun()
+    if st.session_state.pop("_identifiants_azure_enregistres", None):
+        st.success("✅ Identifiants Azure enregistrés.")
+
 with tab_sauvegarde:
     st.subheader("💾 Sauvegarde du référentiel et des réglages")
     st.caption(
         "Exportez l'intégralité de l'environnement de travail de ce client — « Table de correspondance » "
         "(points de vente, comptes, codes analytiques, attribution analytique, moyens de paiement, TVA...), "
         "paramètres généraux de conversion (code journal, compte d'écart...) et configuration de la réception "
-        "mail (tenant, boîte à interroger) — dans un fichier de sauvegarde, et restaurez-le en cas de besoin "
-        "(erreur de manipulation, changement à tester, migration...) sans risquer un réglage resté différent."
+        "mail (tenant, boîte à interroger, identifiants Azure) — dans un fichier de sauvegarde, et "
+        "restaurez-le en cas de besoin (erreur de manipulation, changement à tester, migration...) sans "
+        "risquer un réglage resté différent. ⚠️ Ce fichier contient le **secret client Azure AD** en "
+        "clair s'il est renseigné : à traiter comme une donnée sensible (ne pas partager, stocker en "
+        "lieu sûr)."
     )
 
     # Confirmation affichée au rendu SUIVANT la restauration (posée en session_state juste
@@ -139,6 +165,8 @@ with tab_sauvegarde:
             "reglages_client": {
                 "email_tenant_id": client.get("email_tenant_id", ""),
                 "email_mailbox": client.get("email_mailbox", ""),
+                "azure_client_id": client.get("azure_client_id", ""),
+                "azure_client_secret": client.get("azure_client_secret", ""),
             },
         }
         contenu_json = json.dumps(sauvegarde, ensure_ascii=False, indent=2)
@@ -202,7 +230,7 @@ with tab_sauvegarde:
                         "Moyens de paiement ignorés": len(mappings_a_restaurer.get("modes_paiement_ignores", [])),
                         "Taux de TVA": len(mappings_a_restaurer.get("comptes_tva", [])),
                         "Paramètres généraux": "inclus (code journal, compte d'écart...)",
-                        "Config mail (tenant/boîte)": (
+                        "Config mail (tenant/boîte/identifiants Azure)": (
                             "incluse" if isinstance(reglages_client_a_restaurer, dict)
                             else "non incluse (sauvegarde d'une version antérieure) — laissée telle quelle"
                         ),
@@ -224,6 +252,11 @@ with tab_sauvegarde:
                                 client_id,
                                 reglages_client_a_restaurer.get("email_tenant_id", ""),
                                 reglages_client_a_restaurer.get("email_mailbox", ""),
+                            )
+                            set_azure_credentials(
+                                client_id,
+                                reglages_client_a_restaurer.get("azure_client_id", ""),
+                                reglages_client_a_restaurer.get("azure_client_secret", ""),
                             )
                         if renommage_prevu:
                             rename_client(client_id, nom_a_restaurer)

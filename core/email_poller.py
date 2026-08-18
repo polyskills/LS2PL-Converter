@@ -317,17 +317,42 @@ def _alerter(graph, mailbox: str, sujet: str, detail: str) -> None:
     )
 
 
+def _identifiants_azure(client: dict) -> tuple[str, str] | None:
+    """ID d'application + secret client Azure AD à utiliser pour ce client :
+    priorité aux champs propres au client (azure_client_id/azure_client_secret,
+    Réglages > Gestion Email — cf. core.client_store.set_azure_credentials),
+    sinon repli sur les variables d'environnement globales
+    LSPENNYLANE_AZURE_CLIENT_ID/_SECRET (comportement historique, ne
+    fonctionne que tant qu'un seul client utilise le fetch automatique sur ce
+    serveur, puisque partagées par tous). None si aucune des deux sources
+    n'est disponible."""
+    azure_client_id = client.get("azure_client_id") or os.environ.get("LSPENNYLANE_AZURE_CLIENT_ID")
+    azure_client_secret = client.get("azure_client_secret") or os.environ.get("LSPENNYLANE_AZURE_CLIENT_SECRET")
+    if not azure_client_id or not azure_client_secret:
+        return None
+    return azure_client_id, azure_client_secret
+
+
 def executer_un_cycle() -> None:
     """Un passage sur tous les clients configurés. Appelé en boucle par le
-    script d'entrée `email_poller.py` (intervalle réglable)."""
+    script d'entrée `email_poller.py` (intervalle réglable). Les clients sans
+    identifiants Azure disponibles (ni propres, ni en repli via les
+    variables d'environnement) sont ignorés silencieusement plutôt que de
+    faire échouer tout le cycle pour les autres clients."""
     from core.graph_client import GraphClient
-
-    client_id = os.environ["LSPENNYLANE_AZURE_CLIENT_ID"]
-    client_secret = os.environ["LSPENNYLANE_AZURE_CLIENT_SECRET"]
 
     for client in list_clients():
         tenant_id = client.get("email_tenant_id")
         if not tenant_id:
             continue
-        graph = GraphClient(tenant_id=tenant_id, client_id=client_id, client_secret=client_secret)
+        identifiants = _identifiants_azure(client)
+        if identifiants is None:
+            log.warning(
+                "Fetch mail ignoré pour le client %s : aucun identifiant Azure disponible "
+                "(ni propre au client, ni en variable d'environnement).",
+                client.get("id"),
+            )
+            continue
+        azure_client_id, azure_client_secret = identifiants
+        graph = GraphClient(tenant_id=tenant_id, client_id=azure_client_id, client_secret=azure_client_secret)
         traiter_client(graph, client)

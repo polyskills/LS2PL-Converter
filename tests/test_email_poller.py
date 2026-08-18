@@ -14,8 +14,8 @@ import pytest
 from openpyxl import Workbook
 
 from core.app_config import APP_CONFIG_PATH
-from core.client_store import CLIENTS_DIR, create_client
-from core.email_poller import traiter_client
+from core.client_store import CLIENTS_DIR, create_client, set_azure_credentials
+from core.email_poller import _identifiants_azure, traiter_client
 from core.history_store import list_history
 from core.mapping_store import DEFAULT_MAPPINGS, load_mappings, save_mappings, set_pdv_adresse_email
 
@@ -101,6 +101,36 @@ def test_client_sans_config_mail_ignore():
     graph.messages.append({"id": "m1", "toRecipients": [], "attachments": []})
     traiter_client(graph, client)
     assert graph.marked_read == []  # jamais interrogé : pas de tenant/boîte configurés
+
+
+def test_identifiants_azure_priorite_au_client():
+    client = create_client("Test Identifiants")
+    set_azure_credentials(client["id"], "client-id-propre", "secret-propre")
+    client["azure_client_id"] = "client-id-propre"
+    client["azure_client_secret"] = "secret-propre"
+
+    os.environ["LSPENNYLANE_AZURE_CLIENT_ID"] = "client-id-env"
+    os.environ["LSPENNYLANE_AZURE_CLIENT_SECRET"] = "secret-env"
+    try:
+        assert _identifiants_azure(client) == ("client-id-propre", "secret-propre")
+    finally:
+        del os.environ["LSPENNYLANE_AZURE_CLIENT_ID"]
+        del os.environ["LSPENNYLANE_AZURE_CLIENT_SECRET"]
+
+
+def test_identifiants_azure_repli_sur_variables_environnement():
+    client = {"id": "sans-identifiants-propres"}
+    os.environ["LSPENNYLANE_AZURE_CLIENT_ID"] = "client-id-env"
+    os.environ["LSPENNYLANE_AZURE_CLIENT_SECRET"] = "secret-env"
+    try:
+        assert _identifiants_azure(client) == ("client-id-env", "secret-env")
+    finally:
+        del os.environ["LSPENNYLANE_AZURE_CLIENT_ID"]
+        del os.environ["LSPENNYLANE_AZURE_CLIENT_SECRET"]
+
+
+def test_identifiants_azure_aucun_disponible():
+    assert _identifiants_azure({"id": "sans-rien"}) is None
 
 
 def test_mail_avec_adresse_connue_convertit_et_repond():

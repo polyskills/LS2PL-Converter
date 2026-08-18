@@ -13,7 +13,6 @@ l'historique du client sélectionné.
 from __future__ import annotations
 
 import datetime as dt
-import os
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -94,19 +93,19 @@ if client and client.get("email_tenant_id") and client.get("email_mailbox"):
             "alerte en cas d'échec) — voir la page **Historique** pour le résultat détaillé."
         )
         if st.button("📧 Relever les mails maintenant"):
-            azure_client_id = os.environ.get("LSPENNYLANE_AZURE_CLIENT_ID")
-            azure_client_secret = os.environ.get("LSPENNYLANE_AZURE_CLIENT_SECRET")
-            if not azure_client_id or not azure_client_secret:
+            from core.email_poller import _identifiants_azure, traiter_client
+            from core.graph_client import GraphClient, GraphError
+
+            identifiants = _identifiants_azure(client)
+            if identifiants is None:
                 st.error(
-                    "Variables d'environnement `LSPENNYLANE_AZURE_CLIENT_ID` / "
-                    "`LSPENNYLANE_AZURE_CLIENT_SECRET` absentes sur ce serveur — nécessaires ici "
-                    "aussi (pas seulement pour le service `email_poller.py`), voir "
-                    "`docs/configuration_m365_client.md`."
+                    "Aucun identifiant Azure disponible pour ce client : renseignez « ID d'application » "
+                    "et « Secret client » ci-dessus (onglet Réglages > Gestion Email), ou définissez les "
+                    "variables d'environnement `LSPENNYLANE_AZURE_CLIENT_ID`/`LSPENNYLANE_AZURE_CLIENT_SECRET` "
+                    "sur ce serveur — voir `docs/configuration_m365_client.md`."
                 )
             else:
-                from core.email_poller import traiter_client
-                from core.graph_client import GraphClient, GraphError
-
+                azure_client_id, azure_client_secret = identifiants
                 graph = GraphClient(
                     tenant_id=client["email_tenant_id"],
                     client_id=azure_client_id,

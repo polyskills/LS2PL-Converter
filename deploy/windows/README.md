@@ -65,25 +65,31 @@ l'app comprise, dans
    `Mail.ReadWrite` + `Mail.Send` sur Microsoft Graph.
 2. Le **consentement admin** accordé sur cette app, sur son propre tenant
    (bouton *Grant admin consent*, page API permissions de l'app).
-3. Trois variables d'environnement **machine** (pas juste utilisateur, sans
-   quoi le service ne les verrait pas au démarrage) :
+3. Son **ID d'application** et son **secret client** renseignés dans LS2PL,
+   page Réglages > Gestion Email (recommandé, un jeu d'identifiants par
+   client) — ou, à défaut, en variables d'environnement **machine** (pas
+   juste utilisateur, sans quoi le service ne les verrait pas au
+   démarrage), utilisées en repli pour tout client sans identifiants
+   propres :
    ```powershell
    [Environment]::SetEnvironmentVariable("LSPENNYLANE_AZURE_CLIENT_ID", "<app id>", "Machine")
    [Environment]::SetEnvironmentVariable("LSPENNYLANE_AZURE_CLIENT_SECRET", "<secret>", "Machine")
+   ```
+4. `LSPENNYLANE_ALERTE_INTERNE` (optionnelle, machine) : adresse recevant
+   les alertes internes.
+   ```powershell
    [Environment]::SetEnvironmentVariable("LSPENNYLANE_ALERTE_INTERNE", "compta@polyskills.fr", "Machine")
    ```
-4. Pour chaque client concerné : tenant ID + boîte mail renseignés page
-   **Clients**, et adresse mail dédiée sur chaque point de vente page
+5. Pour chaque client concerné : tenant ID + boîte mail renseignés page
+   **Réglages**, et adresse mail dédiée sur chaque point de vente page
    **Table de correspondance**.
 
-⚠️ `LSPENNYLANE_AZURE_CLIENT_ID`/`_SECRET` sont des variables **globales au
-serveur**, donc communes à tous les clients traités par ce service — cela
-suppose une app registration par client dont l'ID/secret est **le même**
-pour tous, ce qui ne fonctionne que tant qu'**un seul client** utilise le
-fetch automatique sur ce serveur. Pour plusieurs clients simultanément, il
-faudra soit une app par client avec des identifiants distincts (nécessite
-d'adapter `core/email_poller.py` pour lire des credentials par client),
-soit revenir à une app unique enregistrée en multi-tenant.
+⚠️ Les variables d'environnement `LSPENNYLANE_AZURE_CLIENT_ID`/`_SECRET`
+restent **globales au serveur**, donc communes à tous les clients qui n'ont
+pas leurs propres identifiants renseignés dans Réglages — ce repli ne
+fonctionne donc que tant qu'**un seul** client de ce serveur en dépend.
+Pour plusieurs clients simultanément, renseigner l'ID/secret **propre à
+chacun** dans Réglages > Gestion Email évite complètement cette limite.
 
 Puis, dans le même PowerShell administrateur, après `install-service.ps1` :
 ```powershell

@@ -89,12 +89,14 @@ Enfin, déclarer les permissions Microsoft Graph nécessaires :
 L'étape de consentement (bouton *Grant admin consent*) se fait juste
 après, à l'étape 3 ci-dessous, une fois la boîte mail créée.
 
-➡️ **Rien à saisir dans LS2PL à cette étape** — l'**ID d'application** et
-le **secret client** notés ici sont à transmettre à Polyskills : ce sont
-les variables d'environnement `LSPENNYLANE_AZURE_CLIENT_ID` et
-`LSPENNYLANE_AZURE_CLIENT_SECRET` du service installé côté serveur
-d'hébergement (voir les README de déploiement). Le **Tenant ID**, lui, se
-saisit directement dans LS2PL (étape 1).
+➡️ **Dans LS2PL** : page **Réglages** → onglet **Gestion Email** → section
+**« App Azure AD de ce client »** → champs **« ID d'application »** et
+**« Secret client »**. C'est la voie recommandée depuis qu'une app est créée
+par client (plutôt que les variables d'environnement globales
+`LSPENNYLANE_AZURE_CLIENT_ID`/`_SECRET` du service installé côté serveur,
+qui ne fonctionnent que pour un seul client à la fois — conservées comme
+repli si laissées vides ici). Le **Tenant ID**, lui, se saisit dans le même
+onglet, champ « Tenant ID Azure AD du client » (étape 1 ci-dessous).
 
 ---
 
@@ -175,9 +177,9 @@ besoin d'URL de consentement externe : sur la page de l'application →
 clique directement sur **Accorder un consentement d'administrateur pour
 `<nom du tenant>`** (*Grant admin consent for `<tenant>`*), puis confirme.
 Les deux permissions passent au statut **Accordé** (*Granted*) — c'est ce
-consentement, combiné à l'ID d'application/secret/Tenant ID transmis à
-Polyskills, qui autorise le service à lire/répondre sur la boîte du
-client.
+consentement, combiné à l'ID d'application/secret/Tenant ID saisis dans
+LS2PL (étapes 0 et 1), qui autorise le service à lire/répondre sur la
+boîte du client.
 
 ⚠️ Le consentement peut être accordé alors que la boîte créée à l'étape 2
 n'existe pas encore (ou n'est pas propagée) — vérifier son existence avant
@@ -214,7 +216,7 @@ conversion, par sécurité.
 
 | Étape | Où | Qui | Réglage LS2PL correspondant |
 |---|---|---|---|
-| 0. Créer l'application | Entra ID du client → App registrations | Admin client | ID d'application + secret → transmis pour la config serveur (`LSPENNYLANE_AZURE_CLIENT_ID`/`_SECRET`) |
+| 0. Créer l'application | Entra ID du client → App registrations | Admin client | Réglages → Gestion Email → *ID d'application* / *Secret client* |
 | 1. Récupérer le Tenant ID | Entra ID du client | Admin client | Réglages → Gestion Email → *Tenant ID Azure AD du client* |
 | 2. Créer la boîte (+ alias par PDV) | Centre d'admin M365 du client | Admin client | Réglages → Gestion Email → *Boîte mail à interroger (UPN)* |
 | 3. Consentement admin | Page de l'app → API permissions → Grant admin consent | Admin client | — (pré-requis technique, pas de champ dédié) |

@@ -114,16 +114,37 @@ def delete_client(client_id: str) -> None:
 def set_email_config(client_id: str, tenant_id: str, mailbox: str) -> None:
     """Renseigne le tenant M365 et la boîte mail à interroger pour la
     réception automatique des exports LightSpeed de ce client. Les deux
-    boîtes vivent dans le tenant du CLIENT (pas celui de Polyskills) : c'est
-    ce tenant_id qui indique à quelle autorité Azure AD demander un jeton
-    (authentification "application", cf. core.graph_client), après
-    consentement admin donné par le client sur l'app multi-tenant Polyskills.
-    Champs vides = fetch automatique désactivé pour ce client."""
+    vivent dans le tenant du CLIENT : c'est ce tenant_id qui indique à
+    quelle autorité Azure AD demander un jeton (authentification
+    "application", cf. core.graph_client), après consentement admin donné
+    sur l'app Azure AD créée dans ce même tenant (cf.
+    docs/configuration_m365_client.md). Champs vides = fetch automatique
+    désactivé pour ce client."""
     clients = list_clients()
     for c in clients:
         if c["id"] == client_id:
             c["email_tenant_id"] = tenant_id.strip()
             c["email_mailbox"] = mailbox.strip()
+    with open(CLIENTS_INDEX, "w", encoding="utf-8") as f:
+        json.dump(clients, f, ensure_ascii=False, indent=2)
+
+
+def set_azure_credentials(client_id: str, azure_client_id: str, azure_client_secret: str) -> None:
+    """Renseigne l'ID d'application et le secret client de l'app Azure AD de
+    ce client (créée dans son propre tenant, cf. set_email_config), utilisés
+    pour l'authentification Graph du fetch automatique. Stockés en clair
+    dans data/clients/index.json, comme le reste du référentiel — pas de
+    chiffrement à ce stade (usage interne, équipe restreinte).
+
+    Prioritaires sur les variables d'environnement globales
+    LSPENNYLANE_AZURE_CLIENT_ID/_SECRET (legacy, un seul client par serveur) :
+    cf. core.email_poller._identifiants_azure. Champs vides = repli sur ces
+    variables d'environnement pour ce client."""
+    clients = list_clients()
+    for c in clients:
+        if c["id"] == client_id:
+            c["azure_client_id"] = azure_client_id.strip()
+            c["azure_client_secret"] = azure_client_secret.strip()
     with open(CLIENTS_INDEX, "w", encoding="utf-8") as f:
         json.dump(clients, f, ensure_ascii=False, indent=2)
 
