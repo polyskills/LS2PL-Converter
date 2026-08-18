@@ -234,7 +234,7 @@ def _envoyer_resultat(graph, mailbox, adresses_resultat, source, res, raw: bytes
     )
     graph.send_mail(
         mailbox,
-        subject=f"Conversion LightSpeed → Pennylane — {source.client_id}/{source.code_pdv} — {source.date_debut or ''}",
+        subject=f"[LS2PL] Conversion LightSpeed → Pennylane — {source.client_id}/{source.code_pdv} — {source.date_debut or ''}",
         body_html=corps,
         # adresses_resultat = adresse_resultat du point de vente (Table de correspondance,
         # une ou plusieurs séparées par virgule/point-virgule) si renseignée, sinon
