@@ -109,6 +109,7 @@ def test_mail_avec_adresse_connue_convertit_et_repond():
     assert graph.marked_read == ["m1"]
     assert len(graph.sent) == 1
     assert "REST" in graph.sent[0]["subject"]
+    assert graph.sent[0]["to_addresses"] == ["rest@client.example.com"]  # à l'adresse d'origine, pas à l'alerte interne
     assert len(graph.sent[0]["attachments"]) == 2  # fichier source + CSV généré
 
     historique = list_history(client["id"])

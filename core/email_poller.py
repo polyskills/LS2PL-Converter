@@ -146,7 +146,11 @@ def _envoyer_resultat(graph, mailbox, adresse_cible, source, res, raw: bytes, cs
         mailbox,
         subject=f"Conversion LightSpeed → Pennylane — {source.client_id}/{source.code_pdv} — {source.date_debut or ''}",
         body_html=corps,
-        to_addresses=[a for a in [_adresse_alerte_interne()] if a],
+        # À l'adresse d'origine (celle qui a reçu l'export LightSpeed), pas à
+        # l'alerte interne — cf. docstring du module : "succès -> fichiers +
+        # récapitulatif à l'adresse d'origine". `adresse_cible` est garanti non
+        # vide ici (sinon EmailIngestError levée plus haut, avant cet appel).
+        to_addresses=[adresse_cible],
         attachments=[(res.source_filename, raw), (f"import_pennylane_{res.point_de_vente}.csv", csv_bytes)],
     )
 
