@@ -13,10 +13,12 @@ l'historique du client sélectionné.
 from __future__ import annotations
 
 import datetime as dt
+import os
 
 import streamlit as st
 import streamlit.components.v1 as components
 
+from core.client_store import get_client
 from core.converter import convert
 from core.history_store import record_conversion
 from core.lightspeed_parser import LightspeedParseError, parse_lightspeed_export
@@ -80,6 +82,48 @@ if not pdv_codes:
         "Aucun point de vente n'est encore paramétré pour ce client. Rendez-vous sur la page "
         "**Table de correspondance** pour en créer avant de convertir un fichier."
     )
+
+client = get_client(client_id)
+if client and client.get("email_tenant_id") and client.get("email_mailbox"):
+    with st.expander("📧 Ou : relever les mails maintenant (fetch automatique)"):
+        st.caption(
+            "Lance immédiatement un cycle de relève sur la boîte mail configurée pour ce client "
+            "(Réglages > Gestion Email), au lieu d'attendre le prochain passage du service "
+            "automatique ou de lancer `email_poller.py` en ligne de commande. Les mails non lus "
+            "avec pièce jointe sont traités exactement comme d'habitude (conversion, réponse, "
+            "alerte en cas d'échec) — voir la page **Historique** pour le résultat détaillé."
+        )
+        if st.button("📧 Relever les mails maintenant"):
+            azure_client_id = os.environ.get("LSPENNYLANE_AZURE_CLIENT_ID")
+            azure_client_secret = os.environ.get("LSPENNYLANE_AZURE_CLIENT_SECRET")
+            if not azure_client_id or not azure_client_secret:
+                st.error(
+                    "Variables d'environnement `LSPENNYLANE_AZURE_CLIENT_ID` / "
+                    "`LSPENNYLANE_AZURE_CLIENT_SECRET` absentes sur ce serveur — nécessaires ici "
+                    "aussi (pas seulement pour le service `email_poller.py`), voir "
+                    "`docs/configuration_m365_client.md`."
+                )
+            else:
+                from core.email_poller import traiter_client
+                from core.graph_client import GraphClient, GraphError
+
+                graph = GraphClient(
+                    tenant_id=client["email_tenant_id"],
+                    client_id=azure_client_id,
+                    client_secret=azure_client_secret,
+                )
+                with st.spinner("Relève en cours..."):
+                    try:
+                        traiter_client(graph, client)
+                    except GraphError as exc:
+                        st.error(f"Échec de la relève (Microsoft Graph) : {exc}")
+                    except Exception as exc:  # noqa: BLE001 - remonter n'importe quel imprévu à l'écran plutôt que planter la page
+                        st.error(f"Échec de la relève : {exc}")
+                    else:
+                        st.success(
+                            "Cycle de relève terminé. Voir la page **Historique** pour le détail "
+                            "des conversions traitées."
+                        )
 
 st.subheader("Importer le ou les exports LightSpeed")
 
