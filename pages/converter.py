@@ -153,6 +153,19 @@ uploaded_files = st.file_uploader(
     accept_multiple_files=True,
 )
 
+# Le résultat de conversion (étape 3) reste en session_state entre deux
+# reruns, uniquement pour survivre au rerun causé par les widgets de l'étape
+# 2 (point de vente, date...) sans perdre le résultat déjà calculé. Mais si
+# le jeu de fichiers déposés change (nouveau fichier glissé, fichier
+# retiré...), ce résultat devient trompeur : il concerne l'ancien fichier,
+# pas celui affiché à l'écran. On le purge dès que la signature (nom + taille
+# de chaque fichier) ne correspond plus à celle du résultat en mémoire,
+# plutôt que d'attendre un nouveau clic sur "Lancer la conversion".
+signature_fichiers = tuple(sorted((uf.name, uf.size) for uf in uploaded_files)) if uploaded_files else ()
+if st.session_state.get("resultats_signature") != signature_fichiers:
+    st.session_state.pop("resultats", None)
+    st.session_state["resultats_signature"] = signature_fichiers
+
 if uploaded_files:
     st.subheader("2. Associer chaque fichier à son point de vente")
     file_configs = []
