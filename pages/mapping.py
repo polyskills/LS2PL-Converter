@@ -69,17 +69,6 @@ def _bouton_export_csv(df: pd.DataFrame, client_id: str, onglet_slug: str, ongle
     )
 
 
-def _xlsx_bytes_global(feuilles: list[tuple[str, pd.DataFrame]]) -> bytes:
-    """Un classeur .xlsx avec un onglet par table de correspondance — export
-    complet en un seul fichier, plutôt que de devoir télécharger et recroiser
-    8 CSV séparés."""
-    buf = io.BytesIO()
-    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-        for nom, df in feuilles:
-            df.to_excel(writer, sheet_name=nom[:31], index=False)  # Excel limite un nom d'onglet à 31 caractères
-    return buf.getvalue()
-
-
 def _options_avec_libelle(rows: list[dict], code_key: str, libelle_key: str) -> list[str]:
     """Options de menu déroulant "code - libellé" : lisible sans connaître les
     codes par cœur. Seul le code (avant le premier " - ") est réellement
@@ -123,7 +112,8 @@ st.caption(
     "LightSpeed ne gère pas de code analytique : c'est la combinaison "
     "**compte comptable × point de vente × département** qui permet de le reconstituer. "
     "Paramétrez ici les tables utilisées par la conversion, propres au client sélectionné. "
-    "Les réglages généraux (code journal, compte d'écart...) se trouvent page **Réglages**."
+    "Les réglages généraux (code journal, compte d'écart...) se trouvent page **Réglages**, "
+    "où se trouve aussi l'export complet (.xlsx, tous les onglets) — onglet **Sauvegarde**."
 )
 
 if client_id is None:
@@ -586,32 +576,6 @@ with tab_attribution:
             st.session_state["_version_table_attribution"] = st.session_state.get("_version_table_attribution", 0) + 1
             st.success(f"Attribution enregistrée ({len(f_departements)} département(s)).")
             st.rerun()
-
-st.divider()
-st.subheader("⬇️ Export global")
-st.caption(
-    "Un seul fichier Excel (.xlsx) avec un onglet par table de correspondance ci-dessus — pratique "
-    "pour un export complet (archivage, envoi à un tiers) sans télécharger 8 CSV séparés. Reflète le "
-    "contenu actuellement affiché dans chaque onglet, y compris d'éventuelles modifications pas "
-    "encore enregistrées."
-)
-st.download_button(
-    "⬇️ Exporter toute la table de correspondance (.xlsx)",
-    data=_xlsx_bytes_global(
-        [
-            ("Points de vente", edited_pdv_df),
-            ("Comptes de vente PL", edited_comptes_df),
-            ("Codes Analytique PL", edited_codes_analytiques_df),
-            ("Départements LS", edited_departements_df),
-            ("Moyens de paiements", edited_paiement_df),
-            ("Moyens paiement ignorés", edited_paiement_ignores_df),
-            ("Taux de TVA", edited_tva_df),
-            ("Attribution analytique", groupes_df),
-        ]
-    ),
-    file_name=f"table_correspondance_{client_id}_complet_{now_local().strftime('%Y%m%d_%H%M%S')}.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-)
 
 st.divider()
 b1, b2, _ = st.columns([1, 1, 4])

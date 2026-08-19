@@ -12,7 +12,7 @@ import streamlit as st
 
 from core.app_config import get_footer_sidebar, get_url_app, set_footer_sidebar, set_url_app
 from core.client_store import get_client, rename_client, set_azure_credentials, set_email_config
-from core.mapping_store import load_mappings, save_mappings
+from core.mapping_store import build_export_global_xlsx, load_mappings, save_mappings
 from core.timezone import now_local
 from core.ui_common import render_infos_techniques, select_client
 
@@ -176,6 +176,18 @@ with tab_sauvegarde:
             data=contenu_json,
             file_name=nom_fichier,
             mime="application/json",
+            use_container_width=True,
+        )
+
+        st.caption(
+            "Ce fichier .json sert à la restauration ci-contre — pour une simple lecture (tableur, "
+            "envoi à un tiers), l'export ci-dessous est plus adapté."
+        )
+        st.download_button(
+            "⬇️ Exporter la Table de correspondance (.xlsx, tous les onglets)",
+            data=build_export_global_xlsx(mappings),
+            file_name=f"table_correspondance_{client_id}_complet_{now_local().strftime('%Y%m%d_%H%M%S')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True,
         )
 

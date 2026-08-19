@@ -48,8 +48,11 @@ Tables :
 from __future__ import annotations
 
 import copy
+import io
 import json
 import os
+
+import pandas as pd
 
 from core.client_store import client_mappings_path
 
@@ -281,3 +284,34 @@ def set_pdv_adresse_email(client_id: str, code_pdv: str, adresse_email: str) -> 
             changed = True
     if changed:
         save_mappings(client_id, mappings)
+
+
+# (nom de feuille, clé dans mappings, colonnes dans l'ordre voulu) — même
+# ordre que les onglets de la page Table de correspondance.
+_TABLES_EXPORT_GLOBAL = [
+    ("Points de vente", "points_de_vente", ["code", "libelle", "adresse_email", "adresse_resultat", "commentaires"]),
+    ("Comptes de vente PL", "comptes_de_vente", ["compte", "libelle_compte", "commentaires"]),
+    ("Codes Analytique PL", "codes_analytiques", ["code_analytique", "description", "commentaires"]),
+    ("Départements LS", "departements", ["categorie_lightspeed", "compte", "taux_tva", "commentaires"]),
+    ("Moyens de paiements", "comptes_paiement", ["mode_paiement", "compte", "libelle_compte", "commentaires"]),
+    ("Moyens paiement ignorés", "modes_paiement_ignores", ["mode_paiement", "commentaires"]),
+    ("Taux de TVA", "comptes_tva", ["taux", "compte", "libelle_compte", "commentaires"]),
+    ("Attribution analytique", "comptes_analytiques",
+     ["point_de_vente", "compte", "categorie_lightspeed", "famille", "code_analytique", "commentaires"]),
+]
+
+
+def build_export_global_xlsx(mappings: dict) -> bytes:
+    """Classeur .xlsx avec un onglet par table de correspondance du
+    référentiel **enregistré** (contrairement aux exports CSV par onglet de
+    la page Table de correspondance, qui reflètent l'état affiché à l'écran,
+    y compris non enregistré) — pratique pour un export complet en un clic
+    (archivage, envoi à un tiers), sans télécharger 8 CSV séparés. Utilisé
+    depuis la page Réglages > Sauvegarde."""
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        for nom_feuille, cle_mappings, colonnes in _TABLES_EXPORT_GLOBAL:
+            rows = mappings.get(cle_mappings, [])
+            df = pd.DataFrame(rows).reindex(columns=colonnes).fillna("") if rows else pd.DataFrame(columns=colonnes)
+            df.to_excel(writer, sheet_name=nom_feuille[:31], index=False)  # Excel limite un nom d'onglet à 31 car.
+    return buf.getvalue()
