@@ -4,11 +4,14 @@ de conversion LightSpeed → Pennylane, pour le client actuellement sélectionn�
 """
 from __future__ import annotations
 
+import io
+
 import pandas as pd
 import streamlit as st
 
 from core.client_store import get_client
 from core.mapping_store import load_mappings, reset_to_empty, save_mappings, seed_with_examples
+from core.timezone import now_local
 from core.ui_common import select_client
 
 
@@ -38,6 +41,43 @@ def _as_editable_df(rows: list[dict], columns: list[str], tri: str | list[str] |
         cles = [tri] if isinstance(tri, str) else tri
         df = df.sort_values(by=cles, key=lambda s: s.str.casefold(), kind="stable").reset_index(drop=True)
     return df
+
+
+def _csv_bytes(df: pd.DataFrame) -> bytes:
+    """CSV au format Excel FR (BOM UTF-8, séparateur point-virgule, fin de
+    ligne CRLF) — même convention que l'export Pennylane
+    (core.pennylane_export.build_pennylane_csv), pour rester cohérent."""
+    buf = io.StringIO()
+    df.to_csv(buf, index=False, sep=";", lineterminator="\r\n")
+    return ("﻿" + buf.getvalue()).encode("utf-8")
+
+
+def _bouton_export_csv(df: pd.DataFrame, client_id: str, onglet_slug: str, onglet_libelle: str, key: str) -> None:
+    """Bouton de téléchargement CSV d'un onglet, avec un nom de fichier qui
+    précise le client et l'onglet d'origine : sans ça, plusieurs exports
+    successifs (un par onglet, ou pour des clients différents) deviennent
+    impossibles à distinguer une fois dans le dossier de téléchargements.
+    Exporte le contenu **actuellement affiché** dans le tableau, y compris
+    d'éventuelles modifications pas encore enregistrées."""
+    horodatage = now_local().strftime("%Y%m%d_%H%M%S")
+    st.download_button(
+        f"⬇️ Exporter « {onglet_libelle} » en CSV",
+        data=_csv_bytes(df),
+        file_name=f"table_correspondance_{client_id}_{onglet_slug}_{horodatage}.csv",
+        mime="text/csv",
+        key=key,
+    )
+
+
+def _xlsx_bytes_global(feuilles: list[tuple[str, pd.DataFrame]]) -> bytes:
+    """Un classeur .xlsx avec un onglet par table de correspondance — export
+    complet en un seul fichier, plutôt que de devoir télécharger et recroiser
+    8 CSV séparés."""
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        for nom, df in feuilles:
+            df.to_excel(writer, sheet_name=nom[:31], index=False)  # Excel limite un nom d'onglet à 31 caractères
+    return buf.getvalue()
 
 
 def _options_avec_libelle(rows: list[dict], code_key: str, libelle_key: str) -> list[str]:
@@ -151,6 +191,7 @@ with tab_pdv:
         },
     )
     edited_pdv = edited_pdv_df.dropna(how="all").fillna("").to_dict("records")
+    _bouton_export_csv(edited_pdv_df, client_id, "points_de_vente", "Points de vente", key="export_pdv")
 
 with tab_comptes:
     st.markdown(
@@ -174,6 +215,7 @@ with tab_comptes:
         },
     )
     edited_comptes = edited_comptes_df.dropna(how="all").fillna("").to_dict("records")
+    _bouton_export_csv(edited_comptes_df, client_id, "comptes_de_vente", "Comptes de vente PL", key="export_comptes")
     # Les menus déroulants des autres onglets (ci-dessous) se basent volontairement sur l'état
     # ENREGISTRÉ (mappings, chargé une fois en haut de page) plutôt que sur edited_comptes (le
     # retour live de cet éditeur) : sinon, toute frappe ici fait varier la configuration des
@@ -205,6 +247,9 @@ with tab_codes_analytiques:
         },
     )
     edited_codes_analytiques = edited_codes_analytiques_df.dropna(how="all").fillna("").to_dict("records")
+    _bouton_export_csv(
+        edited_codes_analytiques_df, client_id, "codes_analytiques", "Codes Analytique PL", key="export_codes_analytiques"
+    )
     # Même choix que pour comptes_options ci-dessus : basé sur l'état enregistré, pas le live.
     codes_analytiques_options = _options_avec_libelle(
         mappings.get("codes_analytiques", []), "code_analytique", "description"
@@ -269,6 +314,7 @@ with tab_departements:
          "taux_tva": d.get("taux_tva", ""), "commentaires": d.get("commentaires", "")}
         for d in edited_departements_df.dropna(how="all").fillna("").to_dict("records")
     ]
+    _bouton_export_csv(edited_departements_df, client_id, "departements", "Départements LS", key="export_departements")
 
 with tab_paiement:
     st.markdown(
@@ -294,6 +340,7 @@ with tab_paiement:
         },
     )
     edited_paiement = edited_paiement_df.dropna(how="all").fillna("").to_dict("records")
+    _bouton_export_csv(edited_paiement_df, client_id, "moyens_paiement", "Moyens de paiements", key="export_paiement")
 
 with tab_paiement_ignores:
     st.markdown(
@@ -319,6 +366,10 @@ with tab_paiement_ignores:
         },
     )
     edited_paiement_ignores = edited_paiement_ignores_df.dropna(how="all").fillna("").to_dict("records")
+    _bouton_export_csv(
+        edited_paiement_ignores_df, client_id, "moyens_paiement_ignores", "Moyens de paiements ignorés",
+        key="export_paiement_ignores",
+    )
 
 with tab_tva:
     st.markdown("Compte de **TVA collectée** à utiliser pour chaque taux de TVA rencontré dans les ventes.")
@@ -339,6 +390,7 @@ with tab_tva:
         },
     )
     edited_tva = edited_tva_df.dropna(how="all").fillna("").to_dict("records")
+    _bouton_export_csv(edited_tva_df, client_id, "taux_tva", "Taux de TVA", key="export_tva")
 
 with tab_attribution:
     st.markdown(
@@ -417,6 +469,9 @@ with tab_attribution:
             selection_mode="single-row",
             key=table_key,
         )
+
+    if not groupes_df.empty:
+        _bouton_export_csv(groupes_df, client_id, "attribution_analytique", "Attribution analytique", key="export_attribution")
 
     selected_idx = None
     if selection_event is not None and selection_event["selection"]["rows"]:
@@ -531,6 +586,32 @@ with tab_attribution:
             st.session_state["_version_table_attribution"] = st.session_state.get("_version_table_attribution", 0) + 1
             st.success(f"Attribution enregistrée ({len(f_departements)} département(s)).")
             st.rerun()
+
+st.divider()
+st.subheader("⬇️ Export global")
+st.caption(
+    "Un seul fichier Excel (.xlsx) avec un onglet par table de correspondance ci-dessus — pratique "
+    "pour un export complet (archivage, envoi à un tiers) sans télécharger 8 CSV séparés. Reflète le "
+    "contenu actuellement affiché dans chaque onglet, y compris d'éventuelles modifications pas "
+    "encore enregistrées."
+)
+st.download_button(
+    "⬇️ Exporter toute la table de correspondance (.xlsx)",
+    data=_xlsx_bytes_global(
+        [
+            ("Points de vente", edited_pdv_df),
+            ("Comptes de vente PL", edited_comptes_df),
+            ("Codes Analytique PL", edited_codes_analytiques_df),
+            ("Départements LS", edited_departements_df),
+            ("Moyens de paiements", edited_paiement_df),
+            ("Moyens paiement ignorés", edited_paiement_ignores_df),
+            ("Taux de TVA", edited_tva_df),
+            ("Attribution analytique", groupes_df),
+        ]
+    ),
+    file_name=f"table_correspondance_{client_id}_complet_{now_local().strftime('%Y%m%d_%H%M%S')}.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+)
 
 st.divider()
 b1, b2, _ = st.columns([1, 1, 4])
