@@ -301,17 +301,36 @@ _TABLES_EXPORT_GLOBAL = [
 ]
 
 
+def _ajuster_largeurs_colonnes(ws, df: pd.DataFrame) -> None:
+    """Largeur de chaque colonne ajustée à son contenu (en-tête compris) —
+    par défaut openpyxl laisse toutes les colonnes à une largeur fixe
+    identique, illisible dès qu'un champ (ex. libellé, commentaires) dépasse
+    quelques caractères. Plafonnée à 60 caractères pour qu'un commentaire
+    exceptionnellement long n'élargisse pas toute la colonne à l'excès."""
+    from openpyxl.utils import get_column_letter
+
+    for i, colonne in enumerate(df.columns, start=1):
+        plus_long = max(
+            [len(str(colonne))] + [len(str(v)) for v in df[colonne] if v not in (None, "")],
+            default=len(str(colonne)),
+        )
+        ws.column_dimensions[get_column_letter(i)].width = min(plus_long + 2, 60)
+
+
 def build_export_global_xlsx(mappings: dict) -> bytes:
     """Classeur .xlsx avec un onglet par table de correspondance du
     référentiel **enregistré** (contrairement aux exports CSV par onglet de
     la page Table de correspondance, qui reflètent l'état affiché à l'écran,
     y compris non enregistré) — pratique pour un export complet en un clic
     (archivage, envoi à un tiers), sans télécharger 8 CSV séparés. Utilisé
-    depuis la page Réglages > Sauvegarde."""
+    depuis la page Réglages > Sauvegarde. Largeur de colonnes ajustée au
+    contenu de chaque onglet."""
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
         for nom_feuille, cle_mappings, colonnes in _TABLES_EXPORT_GLOBAL:
             rows = mappings.get(cle_mappings, [])
             df = pd.DataFrame(rows).reindex(columns=colonnes).fillna("") if rows else pd.DataFrame(columns=colonnes)
-            df.to_excel(writer, sheet_name=nom_feuille[:31], index=False)  # Excel limite un nom d'onglet à 31 car.
+            nom = nom_feuille[:31]  # Excel limite un nom d'onglet à 31 caractères
+            df.to_excel(writer, sheet_name=nom, index=False)
+            _ajuster_largeurs_colonnes(writer.sheets[nom], df)
     return buf.getvalue()
