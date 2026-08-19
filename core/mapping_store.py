@@ -287,19 +287,22 @@ def set_pdv_adresse_email(client_id: str, code_pdv: str, adresse_email: str) -> 
 
 
 # (nom de feuille, clé dans mappings, colonnes dans l'ordre voulu) — même
-# ordre que les onglets de la page Table de correspondance. Attribution
-# analytique n'y figure pas : traitée à part (cf. _groupes_attribution_analytique),
-# la table stockée a une ligne par département, pas une ligne par groupe.
+# ordre que les onglets de la page Table de correspondance. Départements LS
+# et Attribution analytique n'y figurent pas : traités à part (cf.
+# _lignes_departements et _groupes_attribution_analytique), leur colonne
+# "compte" affiche "code - libellé" (comme à l'écran, menu déroulant relié
+# à Comptes de vente PL) plutôt que le seul code stocké ; Attribution
+# analytique a en plus une ligne par département en stockage, pas par groupe.
 _TABLES_EXPORT_GLOBAL = [
     ("Points de vente", "points_de_vente", ["code", "libelle", "adresse_email", "adresse_resultat", "commentaires"]),
     ("Comptes de vente PL", "comptes_de_vente", ["compte", "libelle_compte", "commentaires"]),
     ("Codes Analytique PL", "codes_analytiques", ["code_analytique", "description", "commentaires"]),
-    ("Départements LS", "departements", ["categorie_lightspeed", "compte", "taux_tva", "commentaires"]),
     ("Moyens de paiements", "comptes_paiement", ["mode_paiement", "compte", "libelle_compte", "commentaires"]),
     ("Moyens paiement ignorés", "modes_paiement_ignores", ["mode_paiement", "commentaires"]),
     ("Taux de TVA", "comptes_tva", ["taux", "compte", "libelle_compte", "commentaires"]),
 ]
 
+_COLONNES_DEPARTEMENTS = ["categorie_lightspeed", "compte", "taux_tva", "commentaires"]
 _COLONNES_ATTRIBUTION_ANALYTIQUE = ["point_de_vente", "compte", "code_analytique", "famille", "departements"]
 
 # Largeur de colonne (caractères) au-delà de laquelle le contenu passe en
@@ -320,6 +323,24 @@ def _affichage_code_libelle(code: str, rows: list[dict], code_key: str, libelle_
             libelle = (r.get(libelle_key) or "").strip()
             return f"{code} - {libelle}" if libelle else code
     return code
+
+
+def _lignes_departements(mappings: dict) -> list[dict]:
+    """Départements avec leur compte affiché en "code - libellé" — même
+    format que le menu déroulant relié à Comptes de vente PL sur la page
+    Table de correspondance (onglet Départements LS). Le stockage ne garde
+    que le code ; sans ce rapprochement, l'export perdrait le libellé
+    pourtant visible à l'écran."""
+    comptes_de_vente = mappings.get("comptes_de_vente", [])
+    return [
+        {
+            "categorie_lightspeed": d.get("categorie_lightspeed", ""),
+            "compte": _affichage_code_libelle(d.get("compte", ""), comptes_de_vente, "compte", "libelle_compte"),
+            "taux_tva": d.get("taux_tva", ""),
+            "commentaires": d.get("commentaires", ""),
+        }
+        for d in mappings.get("departements", [])
+    ]
 
 
 def _groupes_attribution_analytique(mappings: dict) -> list[dict]:
@@ -373,6 +394,13 @@ def _ajuster_largeurs_colonnes(ws, df: pd.DataFrame) -> None:
                 cell.alignment = Alignment(wrap_text=True, vertical="top")
 
 
+def _ecrire_feuille(writer, nom_feuille: str, rows: list[dict], colonnes: list[str]) -> None:
+    df = pd.DataFrame(rows).reindex(columns=colonnes).fillna("") if rows else pd.DataFrame(columns=colonnes)
+    nom = nom_feuille[:31]  # Excel limite un nom d'onglet à 31 caractères
+    df.to_excel(writer, sheet_name=nom, index=False)
+    _ajuster_largeurs_colonnes(writer.sheets[nom], df)
+
+
 def build_export_global_xlsx(mappings: dict) -> bytes:
     """Classeur .xlsx avec un onglet par table de correspondance du
     référentiel **enregistré** (contrairement aux exports CSV par onglet de
@@ -380,21 +408,19 @@ def build_export_global_xlsx(mappings: dict) -> bytes:
     y compris non enregistré) — pratique pour un export complet en un clic
     (archivage, envoi à un tiers), sans télécharger 8 CSV séparés. Utilisé
     depuis la page Réglages > Sauvegarde. Largeur de colonnes ajustée au
-    contenu de chaque onglet."""
+    contenu de chaque onglet. Ordre des onglets identique à celui de la
+    page Table de correspondance."""
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-        for nom_feuille, cle_mappings, colonnes in _TABLES_EXPORT_GLOBAL:
-            rows = mappings.get(cle_mappings, [])
-            df = pd.DataFrame(rows).reindex(columns=colonnes).fillna("") if rows else pd.DataFrame(columns=colonnes)
-            nom = nom_feuille[:31]  # Excel limite un nom d'onglet à 31 caractères
-            df.to_excel(writer, sheet_name=nom, index=False)
-            _ajuster_largeurs_colonnes(writer.sheets[nom], df)
+        for nom_feuille, cle_mappings, colonnes in _TABLES_EXPORT_GLOBAL[:3]:  # Points de vente, Comptes de vente PL, Codes Analytique PL
+            _ecrire_feuille(writer, nom_feuille, mappings.get(cle_mappings, []), colonnes)
 
-        lignes_attribution = _groupes_attribution_analytique(mappings)
-        df_attribution = (
-            pd.DataFrame(lignes_attribution).reindex(columns=_COLONNES_ATTRIBUTION_ANALYTIQUE)
-            if lignes_attribution else pd.DataFrame(columns=_COLONNES_ATTRIBUTION_ANALYTIQUE)
+        _ecrire_feuille(writer, "Départements LS", _lignes_departements(mappings), _COLONNES_DEPARTEMENTS)
+
+        for nom_feuille, cle_mappings, colonnes in _TABLES_EXPORT_GLOBAL[3:]:  # Moyens de paiements, ignorés, Taux de TVA
+            _ecrire_feuille(writer, nom_feuille, mappings.get(cle_mappings, []), colonnes)
+
+        _ecrire_feuille(
+            writer, "Attribution analytique", _groupes_attribution_analytique(mappings), _COLONNES_ATTRIBUTION_ANALYTIQUE
         )
-        df_attribution.to_excel(writer, sheet_name="Attribution analytique", index=False)
-        _ajuster_largeurs_colonnes(writer.sheets["Attribution analytique"], df_attribution)
     return buf.getvalue()

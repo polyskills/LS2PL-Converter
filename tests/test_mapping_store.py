@@ -43,6 +43,40 @@ def test_build_export_global_xlsx_tables_vides_gardent_les_colonnes():
     assert rows == [("taux", "compte", "libelle_compte", "commentaires")]  # en-tête seul, table vide
 
 
+def test_build_export_global_xlsx_departements_affiche_compte_avec_libelle():
+    # Le stockage ne garde que le code ("compte": "70110010") ; l'export doit
+    # afficher "code - libellé" comme le menu déroulant à l'écran, pas le code seul.
+    mappings = {
+        **EMPTY_MAPPINGS,
+        "comptes_de_vente": [{"compte": "70110010", "libelle_compte": "VENTES SOLIDE TVA 10%", "commentaires": ""}],
+        "departements": [
+            {"categorie_lightspeed": "Cuisine - Entrée", "compte": "70110010", "taux_tva": "10%", "commentaires": ""},
+        ],
+    }
+    contenu = build_export_global_xlsx(mappings)
+    wb = openpyxl.load_workbook(io.BytesIO(contenu))
+    ws = wb["Départements LS"]
+    rows = list(ws.iter_rows(values_only=True))
+    assert rows[0] == ("categorie_lightspeed", "compte", "taux_tva", "commentaires")
+    assert rows[1][1] == "70110010 - VENTES SOLIDE TVA 10%"
+
+
+def test_build_export_global_xlsx_departements_compte_sans_libellé_connu():
+    # Compte non retrouvé dans Comptes de vente PL (référentiel incomplet ou
+    # désynchronisé) : le code seul est affiché, jamais une valeur vide.
+    mappings = {
+        **EMPTY_MAPPINGS,
+        "departements": [
+            {"categorie_lightspeed": "Softs", "compte": "70110099", "taux_tva": "10%", "commentaires": ""},
+        ],
+    }
+    contenu = build_export_global_xlsx(mappings)
+    wb = openpyxl.load_workbook(io.BytesIO(contenu))
+    ws = wb["Départements LS"]
+    rows = list(ws.iter_rows(values_only=True))
+    assert rows[1][1] == "70110099"
+
+
 def test_build_export_global_xlsx_largeur_colonnes_ajustee_au_contenu():
     mappings = {
         **EMPTY_MAPPINGS,
