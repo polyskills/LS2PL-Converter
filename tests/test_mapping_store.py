@@ -70,3 +70,37 @@ def test_build_export_global_xlsx_largeur_plafonnee_pour_texte_tres_long():
     wb = openpyxl.load_workbook(io.BytesIO(contenu))
     ws = wb["Comptes de vente PL"]
     assert ws.column_dimensions["C"].width == 60  # plafond, pas 502
+    # Le contenu réel n'est jamais tronqué : renvoi à la ligne dans la cellule plutôt que coupé.
+    cellule = ws["C2"]
+    assert cellule.value == "y" * 500
+    assert cellule.alignment.wrap_text is True
+
+
+def test_build_export_global_xlsx_attribution_analytique_groupee_pas_eclatee():
+    # Reproduit le bug rapporté : un même groupe (pdv, compte, code analytique, famille)
+    # avec plusieurs départements doit rester sur UNE ligne, départements réunis dans une
+    # seule cellule — pas une ligne par département comme dans le stockage brut.
+    mappings = {
+        **EMPTY_MAPPINGS,
+        "comptes_de_vente": [{"compte": "70110010", "libelle_compte": "Ventes solides", "commentaires": ""}],
+        "codes_analytiques": [{"code_analytique": "REST", "description": "Restaurant", "commentaires": ""}],
+        "comptes_analytiques": [
+            {"point_de_vente": "REST", "compte": "70110010", "categorie_lightspeed": "Cuisine - Entrée",
+             "famille": "POINT_DE_VENTE", "code_analytique": "REST", "commentaires": ""},
+            {"point_de_vente": "REST", "compte": "70110010", "categorie_lightspeed": "Cuisine - Plat",
+             "famille": "POINT_DE_VENTE", "code_analytique": "REST", "commentaires": ""},
+            {"point_de_vente": "REST", "compte": "70110010", "categorie_lightspeed": "Cuisine - Dessert",
+             "famille": "POINT_DE_VENTE", "code_analytique": "REST", "commentaires": ""},
+        ],
+    }
+    contenu = build_export_global_xlsx(mappings)
+    wb = openpyxl.load_workbook(io.BytesIO(contenu))
+    ws = wb["Attribution analytique"]
+    rows = list(ws.iter_rows(values_only=True))
+
+    assert rows[0] == ("point_de_vente", "compte", "code_analytique", "famille", "departements")
+    assert len(rows) == 2  # en-tête + UNE seule ligne pour le groupe (pas 3)
+    assert rows[1][0] == "REST"
+    assert rows[1][1] == "70110010 - Ventes solides"
+    assert rows[1][2] == "REST - Restaurant"
+    assert rows[1][4] == "Cuisine - Dessert, Cuisine - Entrée, Cuisine - Plat"

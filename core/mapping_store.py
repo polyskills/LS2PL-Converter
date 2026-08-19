@@ -287,7 +287,9 @@ def set_pdv_adresse_email(client_id: str, code_pdv: str, adresse_email: str) -> 
 
 
 # (nom de feuille, clé dans mappings, colonnes dans l'ordre voulu) — même
-# ordre que les onglets de la page Table de correspondance.
+# ordre que les onglets de la page Table de correspondance. Attribution
+# analytique n'y figure pas : traitée à part (cf. _groupes_attribution_analytique),
+# la table stockée a une ligne par département, pas une ligne par groupe.
 _TABLES_EXPORT_GLOBAL = [
     ("Points de vente", "points_de_vente", ["code", "libelle", "adresse_email", "adresse_resultat", "commentaires"]),
     ("Comptes de vente PL", "comptes_de_vente", ["compte", "libelle_compte", "commentaires"]),
@@ -296,17 +298,66 @@ _TABLES_EXPORT_GLOBAL = [
     ("Moyens de paiements", "comptes_paiement", ["mode_paiement", "compte", "libelle_compte", "commentaires"]),
     ("Moyens paiement ignorés", "modes_paiement_ignores", ["mode_paiement", "commentaires"]),
     ("Taux de TVA", "comptes_tva", ["taux", "compte", "libelle_compte", "commentaires"]),
-    ("Attribution analytique", "comptes_analytiques",
-     ["point_de_vente", "compte", "categorie_lightspeed", "famille", "code_analytique", "commentaires"]),
 ]
+
+_COLONNES_ATTRIBUTION_ANALYTIQUE = ["point_de_vente", "compte", "code_analytique", "famille", "departements"]
+
+# Largeur de colonne (caractères) au-delà de laquelle le contenu passe en
+# renvoi à la ligne plutôt que de continuer à élargir la colonne indéfiniment.
+_LARGEUR_COLONNE_MAX = 60
+
+
+def _affichage_code_libelle(code: str, rows: list[dict], code_key: str, libelle_key: str) -> str:
+    """Même logique que pages/mapping.py:_affichage_depuis_code, dupliquée
+    ici pour ne pas faire dépendre core/ d'une page Streamlit : "code -
+    libellé" si le libellé est retrouvé dans le référentiel fourni, sinon le
+    code seul."""
+    code = (code or "").strip()
+    if not code:
+        return code
+    for r in rows:
+        if (r.get(code_key) or "").strip() == code:
+            libelle = (r.get(libelle_key) or "").strip()
+            return f"{code} - {libelle}" if libelle else code
+    return code
+
+
+def _groupes_attribution_analytique(mappings: dict) -> list[dict]:
+    """Regroupe comptes_analytiques (une ligne par département en stockage)
+    en une ligne par groupe (point de vente, compte, code analytique,
+    famille), départements associés joints dans une seule cellule — même vue
+    que le tableau "Attributions existantes" affiché à l'écran (page Table
+    de correspondance, onglet Attribution analytique). Exporter la table
+    stockée telle quelle éclaterait chaque groupe sur autant de lignes que
+    de départements, perdant la lisibilité du tableau d'origine."""
+    groupes: dict[tuple[str, str, str, str], list[str]] = {}
+    for a in mappings.get("comptes_analytiques", []):
+        cle = (a.get("point_de_vente", ""), a.get("compte", ""), a.get("code_analytique", ""), a.get("famille", ""))
+        groupes.setdefault(cle, []).append(a.get("categorie_lightspeed", ""))
+
+    comptes_de_vente = mappings.get("comptes_de_vente", [])
+    codes_analytiques = mappings.get("codes_analytiques", [])
+    return [
+        {
+            "point_de_vente": pdv,
+            "compte": _affichage_code_libelle(compte, comptes_de_vente, "compte", "libelle_compte"),
+            "code_analytique": _affichage_code_libelle(code, codes_analytiques, "code_analytique", "description"),
+            "famille": famille,
+            "departements": ", ".join(sorted((d for d in deps if d), key=str.casefold)),
+        }
+        for (pdv, compte, code, famille), deps in sorted(groupes.items())
+    ]
 
 
 def _ajuster_largeurs_colonnes(ws, df: pd.DataFrame) -> None:
     """Largeur de chaque colonne ajustée à son contenu (en-tête compris) —
     par défaut openpyxl laisse toutes les colonnes à une largeur fixe
     identique, illisible dès qu'un champ (ex. libellé, commentaires) dépasse
-    quelques caractères. Plafonnée à 60 caractères pour qu'un commentaire
-    exceptionnellement long n'élargisse pas toute la colonne à l'excès."""
+    quelques caractères. Au-delà de _LARGEUR_COLONNE_MAX, la colonne
+    n'est plus élargie : le contenu passe en renvoi à la ligne (wrap_text)
+    à la place, pour ne jamais tronquer visuellement un contenu réellement
+    plus long, seulement l'afficher sur plusieurs lignes dans la cellule."""
+    from openpyxl.styles import Alignment
     from openpyxl.utils import get_column_letter
 
     for i, colonne in enumerate(df.columns, start=1):
@@ -314,7 +365,12 @@ def _ajuster_largeurs_colonnes(ws, df: pd.DataFrame) -> None:
             [len(str(colonne))] + [len(str(v)) for v in df[colonne] if v not in (None, "")],
             default=len(str(colonne)),
         )
-        ws.column_dimensions[get_column_letter(i)].width = min(plus_long + 2, 60)
+        lettre = get_column_letter(i)
+        largeur_naturelle = plus_long + 2
+        ws.column_dimensions[lettre].width = min(largeur_naturelle, _LARGEUR_COLONNE_MAX)
+        if largeur_naturelle > _LARGEUR_COLONNE_MAX:
+            for cell in ws[lettre][1:]:  # [1:] saute l'en-tête (ligne 1)
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
 
 
 def build_export_global_xlsx(mappings: dict) -> bytes:
@@ -333,4 +389,12 @@ def build_export_global_xlsx(mappings: dict) -> bytes:
             nom = nom_feuille[:31]  # Excel limite un nom d'onglet à 31 caractères
             df.to_excel(writer, sheet_name=nom, index=False)
             _ajuster_largeurs_colonnes(writer.sheets[nom], df)
+
+        lignes_attribution = _groupes_attribution_analytique(mappings)
+        df_attribution = (
+            pd.DataFrame(lignes_attribution).reindex(columns=_COLONNES_ATTRIBUTION_ANALYTIQUE)
+            if lignes_attribution else pd.DataFrame(columns=_COLONNES_ATTRIBUTION_ANALYTIQUE)
+        )
+        df_attribution.to_excel(writer, sheet_name="Attribution analytique", index=False)
+        _ajuster_largeurs_colonnes(writer.sheets["Attribution analytique"], df_attribution)
     return buf.getvalue()
