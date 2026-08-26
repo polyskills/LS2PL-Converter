@@ -11,9 +11,6 @@ Ne fonctionne QUE sur un déploiement serveur (Windows/macOS, cf. deploy/) :
   "AppExit Default Restart" côté Windows, LaunchDaemon avec KeepAlive côté
   macOS - déjà le cas par défaut avec deploy/windows/install-service.ps1 et
   deploy/macos/install-service.sh).
-Sur Streamlit Community Cloud (pas de service superviseur, redéploiement
-déjà automatique à chaque push), verifier_mise_a_jour() échoue proprement
-et la page l'indique clairement plutôt que de proposer un bouton inopérant.
 
 Redémarrage du service de fetch mail : contrairement à l'app elle-même
 (qui peut simplement s'arrêter et laisser son propre superviseur la

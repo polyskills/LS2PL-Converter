@@ -314,9 +314,7 @@ with tab_infos:
     st.caption(
         "Récupère et installe la dernière version publiée sur la branche suivie, sans passer par un "
         "accès terminal/admin — utile pour appliquer un correctif urgent sans attendre. Redémarre "
-        "l'application **et** le service de fetch mail. Uniquement disponible sur un déploiement "
-        "serveur (Windows/macOS, voir `deploy/`) : sur Streamlit Community Cloud, chaque envoi de "
-        "code redéploie déjà automatiquement, ce bouton n'a pas d'effet utile."
+        "l'application **et** le service de fetch mail."
     )
     if st.button("🔍 Vérifier les mises à jour"):
         st.session_state["_maj_verification"] = verifier_mise_a_jour()

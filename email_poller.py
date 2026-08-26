@@ -35,7 +35,6 @@ import logging
 import os
 import time
 
-from core.bootstrap import ensure_defaults
 from core.email_poller import executer_un_cycle
 from core.self_update import RESTART_SENTINEL_EMAIL_POLLER
 
@@ -71,7 +70,6 @@ def _attendre(interval: int) -> None:
 
 def main() -> None:
     interval = int(os.environ.get("LSPENNYLANE_POLL_INTERVAL_SECONDS", "300"))
-    ensure_defaults()
 
     log.info("Service de fetch LightSpeed démarré (intervalle %ss).", interval)
     while True:

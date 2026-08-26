@@ -2,7 +2,7 @@
 Fuseau horaire applicatif unique, pour que tous les horodatages affichés
 (version déployée, date/heure de conversion, historique...) soient exprimés
 dans le fuseau de l'activité (France) plutôt que dans celui, arbitraire, du
-serveur d'hébergement (souvent UTC sur Streamlit Community Cloud) — gère
+serveur d'hébergement — gère
 automatiquement le passage heure d'été/hiver.
 """
 from __future__ import annotations

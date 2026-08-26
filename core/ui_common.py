@@ -6,7 +6,6 @@ import html
 import streamlit as st
 
 from core.app_config import get_footer_sidebar
-from core.bootstrap import ensure_defaults
 from core.client_store import create_client, list_clients
 from core.timezone import to_local
 from core.version_info import get_version_info
@@ -52,7 +51,6 @@ def render_client_selector() -> str | None:
     app.py. Mémorise le choix dans st.session_state['client_id'], relu
     ensuite par select_client(). Ne rend rien si aucun client n'existe encore
     (select_client() affiche alors le formulaire de création rapide)."""
-    ensure_defaults()
     clients = list_clients()
     if not clients:
         return None

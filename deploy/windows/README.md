@@ -2,9 +2,8 @@
 
 Cette option héberge l'application en continu sur un serveur Windows
 partagé, accessible à toute l'équipe via une URL réseau (`http://<serveur>:8501`).
-Contrairement à Streamlit Community Cloud, **le disque est réellement
-persistant** : le référentiel et l'historique de chaque client ne sont
-plus perdus à chaque redémarrage.
+**Le disque est réellement persistant** : le référentiel et l'historique de
+chaque client ne sont jamais perdus au redémarrage.
 
 ## Prérequis
 
