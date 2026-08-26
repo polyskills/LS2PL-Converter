@@ -114,15 +114,16 @@ if client and client.get("email_tenant_id") and client.get("email_mailbox"):
                 )
                 with st.spinner("Relève en cours..."):
                     try:
-                        traiter_client(graph, client)
+                        nb_recuperes = traiter_client(graph, client)
                     except GraphError as exc:
                         st.error(f"Échec de la relève (Microsoft Graph) : {exc}")
                     except Exception as exc:  # noqa: BLE001 - remonter n'importe quel imprévu à l'écran plutôt que planter la page
                         st.error(f"Échec de la relève : {exc}")
                     else:
+                        pluriel = "s" if nb_recuperes != 1 else ""
                         st.success(
-                            "Cycle de relève terminé. Voir la page **Historique** pour le détail "
-                            "des conversions traitées."
+                            f"Cycle de relève terminé : {nb_recuperes} e-mail{pluriel} récupéré{pluriel}. "
+                            "Voir la page **Historique** pour le détail des conversions traitées."
                         )
 
 st.subheader("Importer le ou les exports LightSpeed")

@@ -110,8 +110,27 @@ def test_client_sans_config_mail_ignore():
     client = create_client("Sans fetch")
     graph = FakeGraph()
     graph.messages.append({"id": "m1", "toRecipients": [], "attachments": []})
-    traiter_client(graph, client)
+    assert traiter_client(graph, client) == 0
     assert graph.marked_read == []  # jamais interrogé : pas de tenant/boîte configurés
+
+
+def test_traiter_client_retourne_le_nombre_de_mails_recuperes():
+    # Un mail avec pièce jointe exploitable (récupéré, marqué lu) et un mail
+    # de correspondance normale sans pièce jointe utile (laissé non lu, ne
+    # compte pas) - seul le premier doit compter dans le total retourné.
+    client = _client_pret("rest@client.example.com")
+    graph = FakeGraph()
+    graph.messages.append(
+        {
+            "id": "m1",
+            "toRecipients": [{"emailAddress": {"address": "rest@client.example.com"}}],
+            "attachments": [("client_rest_business_export_accounting_20260810_20260811.xlsx", _build_sample_xlsx())],
+        }
+    )
+    graph.messages.append({"id": "m2", "toRecipients": [{"emailAddress": {"address": "rest@client.example.com"}}], "attachments": []})
+
+    assert traiter_client(graph, client) == 1
+    assert graph.marked_read == ["m1"]
 
 
 def test_identifiants_azure_priorite_au_client():

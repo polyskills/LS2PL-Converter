@@ -77,21 +77,30 @@ def _adresses_destinataires(message: dict) -> list[str]:
     return [r["emailAddress"]["address"] for r in message.get("toRecipients", [])]
 
 
-def traiter_client(graph, client: dict) -> None:
+def traiter_client(graph, client: dict) -> int:
     """Traite tous les mails en attente de la boîte configurée pour ce
     client. Ne fait rien si tenant/boîte ne sont pas renseignés (fetch
-    automatique non activé pour ce client)."""
+    automatique non activé pour ce client). Retourne le nombre de mails
+    effectivement récupérés (pièce jointe exploitable trouvée, marqués lus) -
+    utile pour restituer un compte-rendu, ex. bouton « Relever les mails
+    maintenant » (page Convertisseur)."""
     tenant_id = client.get("email_tenant_id")
     mailbox = client.get("email_mailbox")
     if not tenant_id or not mailbox:
-        return
+        return 0
 
     prefixe_mail = get_prefixe_mail(client)
+    nb_recuperes = 0
     for message in graph.list_unread_with_attachments(mailbox):
-        traiter_message(graph, mailbox, message, prefixe_mail)
+        if traiter_message(graph, mailbox, message, prefixe_mail):
+            nb_recuperes += 1
+    return nb_recuperes
 
 
-def traiter_message(graph, mailbox: str, message: dict, prefixe_mail: str = "LS2PL") -> None:
+def traiter_message(graph, mailbox: str, message: dict, prefixe_mail: str = "LS2PL") -> bool:
+    """Retourne True si le mail a été effectivement récupéré (pièce jointe
+    exploitable trouvée, marqué lu), False sinon (ex. mail de correspondance
+    normale sur cette boîte, sans export LightSpeed reconnu — laissé non lu)."""
     adresses_candidates = _adresses_destinataires(message)
     fichiers = [
         f for f in graph.list_file_attachments(mailbox, message["id"])
@@ -103,12 +112,13 @@ def traiter_message(graph, mailbox: str, message: dict, prefixe_mail: str = "LS2
     # lu plutôt que d'alerter à tort — seule une pièce jointe reconnue comme
     # export LightSpeed déclenche un traitement ou une alerte.
     if not fichiers:
-        return
+        return False
 
     for fichier in fichiers:
         _traiter_piece_jointe(graph, mailbox, adresses_candidates, fichier["name"], fichier["content"], prefixe_mail)
 
     graph.mark_as_read(mailbox, message["id"])
+    return True
 
 
 def _traiter_piece_jointe(
