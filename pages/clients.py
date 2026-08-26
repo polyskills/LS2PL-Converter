@@ -37,33 +37,49 @@ clients = list_clients()
 if not clients:
     st.info("Aucun client pour l'instant.")
 else:
-    for c in clients:
-        with st.expander(f"🏢 {c['nom']}  ·  `{c['id']}`"):
-            new_name = st.text_input("Renommer", value=c["nom"], key=f"rename_{c['id']}")
-            if st.button("Enregistrer le nouveau nom", key=f"save_rename_{c['id']}"):
-                rename_client(c["id"], new_name.strip())
-                st.success("Nom mis à jour.")
-                st.rerun()
+    # Resserre l'espace entre les lignes de la liste (uniquement celle-ci, pas
+    # le reste de la page) : Streamlit espace chaque widget de 16px par défaut
+    # (gap du conteneur flex stVerticalBlock), ce qui devient vite beaucoup une
+    # fois repliés sur de nombreux clients. st.container(key=...) donne une
+    # classe CSS ("st-key-<key>") directement sur SON PROPRE conteneur flex.
+    st.markdown(
+        """
+        <style>
+        .st-key-liste_clients {
+            gap: 0.35rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    with st.container(key="liste_clients"):
+        for c in clients:
+            with st.expander(f"🏢 {c['nom']}  ·  `{c['id']}`"):
+                new_name = st.text_input("Renommer", value=c["nom"], key=f"rename_{c['id']}")
+                if st.button("Enregistrer le nouveau nom", key=f"save_rename_{c['id']}"):
+                    rename_client(c["id"], new_name.strip())
+                    st.success("Nom mis à jour.")
+                    st.rerun()
 
-            st.divider()
-            _cle_confirmation = f"confirmation_suppression_{c['id']}"
-            if st.button("🗑️ Supprimer ce client", key=f"delete_{c['id']}"):
-                st.session_state[_cle_confirmation] = True
-            if st.session_state.get(_cle_confirmation):
-                st.warning(
-                    f"⚠️ Ceci supprime **définitivement** « {c['nom']} » et tout son contenu "
-                    "(référentiel, historique de conversions, fichiers archivés). Cette action "
-                    "est irréversible — pensez à faire une sauvegarde (page **Réglages**) avant "
-                    "si un doute subsiste."
-                )
-                cv1, cv2, _ = st.columns([1, 1, 4])
-                if cv1.button("✅ Oui, supprimer", key=f"confirm_delete_{c['id']}", type="primary"):
-                    delete_client(c["id"])
-                    st.session_state.pop(_cle_confirmation, None)
-                    if st.session_state.get("client_id") == c["id"]:
-                        st.session_state.pop("client_id", None)
-                    st.success(f"Client « {c['nom']} » supprimé.")
-                    st.rerun()
-                if cv2.button("Annuler", key=f"cancel_delete_{c['id']}"):
-                    st.session_state.pop(_cle_confirmation, None)
-                    st.rerun()
+                st.divider()
+                _cle_confirmation = f"confirmation_suppression_{c['id']}"
+                if st.button("🗑️ Supprimer ce client", key=f"delete_{c['id']}"):
+                    st.session_state[_cle_confirmation] = True
+                if st.session_state.get(_cle_confirmation):
+                    st.warning(
+                        f"⚠️ Ceci supprime **définitivement** « {c['nom']} » et tout son contenu "
+                        "(référentiel, historique de conversions, fichiers archivés). Cette action "
+                        "est irréversible — pensez à faire une sauvegarde (page **Réglages**) avant "
+                        "si un doute subsiste."
+                    )
+                    cv1, cv2, _ = st.columns([1, 1, 4])
+                    if cv1.button("✅ Oui, supprimer", key=f"confirm_delete_{c['id']}", type="primary"):
+                        delete_client(c["id"])
+                        st.session_state.pop(_cle_confirmation, None)
+                        if st.session_state.get("client_id") == c["id"]:
+                            st.session_state.pop("client_id", None)
+                        st.success(f"Client « {c['nom']} » supprimé.")
+                        st.rerun()
+                    if cv2.button("Annuler", key=f"cancel_delete_{c['id']}"):
+                        st.session_state.pop(_cle_confirmation, None)
+                        st.rerun()
