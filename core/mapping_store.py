@@ -142,6 +142,34 @@ def _ensure_file(client_id: str, seed: dict) -> str:
     return path
 
 
+def _reparer_codes_analytiques_tronques(mappings: dict) -> bool:
+    """Auto-répare une donnée historique : avant correction, le menu déroulant
+    de « Attribution analytique » affichait « code - description » et
+    l'enregistrement coupait au premier " - ", tronquant le code_analytique
+    stocké à son préfixe (ex. "ASPP" au lieu de "ASPP - Alcools & Cocktails
+    alcoolisés") dès que le vrai code contenait lui-même un " - ". Si le code
+    stocké ne correspond à AUCUN code du référentiel « Codes Analytique PL »
+    mais correspond exactement au préfixe (avant le premier " - ") d'UN SEUL
+    code de ce référentiel, on le corrige automatiquement vers ce code
+    complet — jamais en cas d'ambiguïté (plusieurs codes partagent le même
+    préfixe), pour ne jamais deviner à tort. Retourne True si une correction
+    a été appliquée (appelant : persister le résultat)."""
+    codes_valides = {c["code_analytique"] for c in mappings.get("codes_analytiques", []) if c.get("code_analytique")}
+    prefixes: dict[str, list[str]] = {}
+    for code in codes_valides:
+        prefixe = code.split(" - ", 1)[0]
+        if prefixe != code:
+            prefixes.setdefault(prefixe, []).append(code)
+
+    modifie = False
+    for row in mappings.get("comptes_analytiques", []):
+        code = row.get("code_analytique")
+        if code and code not in codes_valides and len(prefixes.get(code, [])) == 1:
+            row["code_analytique"] = prefixes[code][0]
+            modifie = True
+    return modifie
+
+
 def load_mappings(client_id: str) -> dict:
     path = _ensure_file(client_id, EMPTY_MAPPINGS)
     with open(path, "r", encoding="utf-8") as f:
@@ -150,6 +178,8 @@ def load_mappings(client_id: str) -> dict:
     merged = copy.deepcopy(EMPTY_MAPPINGS)
     for k, v in data.items():
         merged[k] = v
+    if _reparer_codes_analytiques_tronques(merged):
+        save_mappings(client_id, merged)
     return merged
 
 

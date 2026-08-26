@@ -1,13 +1,23 @@
 """Tests de core.mapping_store : export global .xlsx (un onglet par table)."""
 import io
 import os
+import shutil
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import openpyxl
+import pytest
 
-from core.mapping_store import EMPTY_MAPPINGS, build_export_global_xlsx
+from core.client_store import CLIENTS_DIR, create_client
+from core.mapping_store import EMPTY_MAPPINGS, build_export_global_xlsx, load_mappings, save_mappings
+
+
+@pytest.fixture(autouse=True)
+def _clean_clients_dir():
+    shutil.rmtree(CLIENTS_DIR, ignore_errors=True)
+    yield
+    shutil.rmtree(CLIENTS_DIR, ignore_errors=True)
 
 
 def test_build_export_global_xlsx_un_onglet_par_table():
@@ -140,3 +150,65 @@ def test_build_export_global_xlsx_attribution_analytique_groupee_pas_eclatee():
     # le code peut déjà être la chaîne longue à afficher (ex. "ASPP - Alcools & Cocktails alcoolisés").
     assert rows[1][2] == "REST"
     assert rows[1][4] == "Cuisine - Dessert, Cuisine - Entrée, Cuisine - Plat"
+
+
+def test_load_mappings_repare_un_code_analytique_historiquement_tronque():
+    # Reproduit le bug rapporté : avant correction, le menu déroulant enregistrait le
+    # code_analytique tronqué au premier " - " (ex. "ASPP" au lieu de "ASPP - Alcools &
+    # Cocktails alcoolisés"). load_mappings doit réparer automatiquement cette donnée
+    # historique dès lors qu'un seul code du référentiel partage ce préfixe.
+    client = create_client("Test Réparation")
+    data = {
+        **EMPTY_MAPPINGS,
+        "codes_analytiques": [{"code_analytique": "ASPP - Alcools & Cocktails alcoolisés", "description": "", "commentaires": ""}],
+        "comptes_analytiques": [
+            {"point_de_vente": "REST", "compte": "70110010", "categorie_lightspeed": "Cuisine - Entrée",
+             "famille": "POINT_DE_VENTE", "code_analytique": "ASPP", "commentaires": ""},
+        ],
+    }
+    save_mappings(client["id"], data)
+
+    reloaded = load_mappings(client["id"])
+    assert reloaded["comptes_analytiques"][0]["code_analytique"] == "ASPP - Alcools & Cocktails alcoolisés"
+
+    # La réparation est persistée (pas seulement en mémoire) : un second chargement
+    # retrouve directement le code complet sans dépendre du référentiel.
+    relu_du_disque = load_mappings(client["id"])
+    assert relu_du_disque["comptes_analytiques"][0]["code_analytique"] == "ASPP - Alcools & Cocktails alcoolisés"
+
+
+def test_load_mappings_ne_repare_pas_si_prefixe_ambigu():
+    # Deux codes différents partagent le même préfixe "ASPP" : impossible de deviner
+    # lequel était visé, la réparation automatique doit s'abstenir plutôt que se tromper.
+    client = create_client("Test Ambiguïté")
+    data = {
+        **EMPTY_MAPPINGS,
+        "codes_analytiques": [
+            {"code_analytique": "ASPP - Alcools & Cocktails alcoolisés", "description": "", "commentaires": ""},
+            {"code_analytique": "ASPP - Softs", "description": "", "commentaires": ""},
+        ],
+        "comptes_analytiques": [
+            {"point_de_vente": "REST", "compte": "70110010", "categorie_lightspeed": "Cuisine - Entrée",
+             "famille": "POINT_DE_VENTE", "code_analytique": "ASPP", "commentaires": ""},
+        ],
+    }
+    save_mappings(client["id"], data)
+
+    reloaded = load_mappings(client["id"])
+    assert reloaded["comptes_analytiques"][0]["code_analytique"] == "ASPP"  # inchangé, ambigu
+
+
+def test_load_mappings_ne_touche_pas_un_code_deja_correct():
+    client = create_client("Test Code Correct")
+    data = {
+        **EMPTY_MAPPINGS,
+        "codes_analytiques": [{"code_analytique": "REST", "description": "Restaurant", "commentaires": ""}],
+        "comptes_analytiques": [
+            {"point_de_vente": "REST", "compte": "70110010", "categorie_lightspeed": "Cuisine - Entrée",
+             "famille": "POINT_DE_VENTE", "code_analytique": "REST", "commentaires": ""},
+        ],
+    }
+    save_mappings(client["id"], data)
+
+    reloaded = load_mappings(client["id"])
+    assert reloaded["comptes_analytiques"][0]["code_analytique"] == "REST"
