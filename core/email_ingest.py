@@ -12,9 +12,14 @@ futur service de fetch appellera pour chaque pièce jointe reçue :
 2. extraire la période couverte par l'export depuis le nom de fichier, pour
    pré-remplir la date de pièce.
 
-Convention de nommage observée sur un export réel :
+Convention de nommage observée sur les exports réels — le préfixe varie
+(nom de client/pdv, "business_export_accounting", ou tout autre libellé),
+mais se termine TOUJOURS par les deux dates de la période au format
+AAAAMMJJ_AAAAMMJJ, juste avant l'extension :
     annesophiepicparis_ladamedepicbar_business_export_accounting_20260810_20260811.xls
-    -> période couverte : du 10/08/2026 au 11/08/2026.
+    test-mail-automatique_20260826_20260827.xls
+    -> période couverte respectivement du 10/08/2026 au 11/08/2026, et du
+       26/08/2026 au 27/08/2026.
 Le préfixe client/pdv du nom de fichier n'est volontairement pas exploité
 pour l'identification (c'est l'adresse mail qui fait foi) : il ne sert que de
 garde-fou optionnel, en warning, si jamais un fichier atterrit sur la mauvaise
@@ -27,7 +32,11 @@ from dataclasses import dataclass
 
 from core.mapping_store import find_client_pdv_by_email
 
-_PERIODE_RE = re.compile(r"business_export_accounting_(\d{8})_(\d{8})", re.IGNORECASE)
+# Ancré en fin de nom de fichier (juste avant une éventuelle extension) plutôt
+# que sur le libellé fixe "business_export_accounting_" : ce dernier n'est
+# qu'une convention parmi d'autres observées, alors que les deux dates en fin
+# de nom, elles, sont systématiques quel que soit le préfixe utilisé.
+_PERIODE_RE = re.compile(r"(\d{8})_(\d{8})(?:\.\w+)?$", re.IGNORECASE)
 
 
 class EmailIngestError(Exception):
