@@ -149,6 +149,28 @@ def set_azure_credentials(client_id: str, azure_client_id: str, azure_client_sec
         json.dump(clients, f, ensure_ascii=False, indent=2)
 
 
+DEFAULT_PREFIXE_MAIL = "LS2PL"
+
+
+def get_prefixe_mail(client: dict) -> str:
+    """Préfixe entre crochets utilisé dans le sujet des mails du fetch
+    automatique (résultat de conversion, notifications d'échec côté client) -
+    propre à chaque client (ex. "ASPP" pour Maison PIC Paris), pour se
+    distinguer facilement dans une boîte mail au milieu d'autres échanges.
+    Ne s'applique pas aux alertes internes (LSPENNYLANE_ALERTE_INTERNE),
+    génériques et partagées entre tous les clients."""
+    return (client.get("prefixe_mail") or "").strip() or DEFAULT_PREFIXE_MAIL
+
+
+def set_prefixe_mail(client_id: str, prefixe: str) -> None:
+    clients = list_clients()
+    for c in clients:
+        if c["id"] == client_id:
+            c["prefixe_mail"] = prefixe.strip()
+    with open(CLIENTS_INDEX, "w", encoding="utf-8") as f:
+        json.dump(clients, f, ensure_ascii=False, indent=2)
+
+
 def client_dir(client_id: str) -> str:
     return os.path.join(CLIENTS_DIR, client_id)
 

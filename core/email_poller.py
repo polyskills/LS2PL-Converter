@@ -36,7 +36,7 @@ import os
 import re
 
 from core.app_config import get_url_app
-from core.client_store import list_clients
+from core.client_store import get_prefixe_mail, list_clients
 from core.converter import convert
 from core.email_ingest import EmailIngestError, identifier_source
 from core.history_store import record_conversion
@@ -86,11 +86,12 @@ def traiter_client(graph, client: dict) -> None:
     if not tenant_id or not mailbox:
         return
 
+    prefixe_mail = get_prefixe_mail(client)
     for message in graph.list_unread_with_attachments(mailbox):
-        traiter_message(graph, mailbox, message)
+        traiter_message(graph, mailbox, message, prefixe_mail)
 
 
-def traiter_message(graph, mailbox: str, message: dict) -> None:
+def traiter_message(graph, mailbox: str, message: dict, prefixe_mail: str = "LS2PL") -> None:
     adresses_candidates = _adresses_destinataires(message)
     fichiers = [
         f for f in graph.list_file_attachments(mailbox, message["id"])
@@ -105,12 +106,14 @@ def traiter_message(graph, mailbox: str, message: dict) -> None:
         return
 
     for fichier in fichiers:
-        _traiter_piece_jointe(graph, mailbox, adresses_candidates, fichier["name"], fichier["content"])
+        _traiter_piece_jointe(graph, mailbox, adresses_candidates, fichier["name"], fichier["content"], prefixe_mail)
 
     graph.mark_as_read(mailbox, message["id"])
 
 
-def _traiter_piece_jointe(graph, mailbox: str, adresses_candidates: list[str], filename: str, raw: bytes) -> None:
+def _traiter_piece_jointe(
+    graph, mailbox: str, adresses_candidates: list[str], filename: str, raw: bytes, prefixe_mail: str = "LS2PL",
+) -> None:
     # Plusieurs adresses candidates (cf. _adresses_destinataires) : on essaie
     # chacune jusqu'à en trouver une rattachée à un point de vente — utile
     # notamment en repli (toRecipients) quand plusieurs destinataires
@@ -142,7 +145,7 @@ def _traiter_piece_jointe(graph, mailbox: str, adresses_candidates: list[str], f
         _notifier_echec_client(
             graph, mailbox, adresses_candidates,
             sujet="Échec de traitement automatique de votre export LightSpeed",
-            filename=filename, detail=detail,
+            filename=filename, detail=detail, prefixe_mail=prefixe_mail,
         )
         return
 
@@ -169,6 +172,7 @@ def _traiter_piece_jointe(graph, mailbox: str, adresses_candidates: list[str], f
             graph, mailbox, adresses_notification,
             sujet=f"Échec de traitement de votre export LightSpeed — {source.code_pdv}",
             filename=filename, detail=detail, point_de_vente=source.code_pdv, periode=periode,
+            prefixe_mail=prefixe_mail,
         )
         return
 
@@ -192,7 +196,7 @@ def _traiter_piece_jointe(graph, mailbox: str, adresses_candidates: list[str], f
     record_conversion(source.client_id, res, raw, csv_bytes, horodatage, destinataires_email=adresses_notification)
 
     if res.sans_erreur:
-        _envoyer_resultat(graph, mailbox, adresses_notification, source, res, raw, csv_bytes)
+        _envoyer_resultat(graph, mailbox, adresses_notification, source, res, raw, csv_bytes, prefixe_mail)
     else:
         detail = "\n".join(res.erreurs)
         if source.avertissement:
@@ -206,6 +210,7 @@ def _traiter_piece_jointe(graph, mailbox: str, adresses_candidates: list[str], f
             graph, mailbox, adresses_notification,
             sujet=f"Échec de conversion de votre export LightSpeed — {source.code_pdv}",
             filename=filename, detail=detail, point_de_vente=source.code_pdv, periode=periode,
+            prefixe_mail=prefixe_mail,
         )
 
 
@@ -236,7 +241,9 @@ def _pied_de_page_lien_app() -> str:
     )
 
 
-def _envoyer_resultat(graph, mailbox, adresses_resultat, source, res, raw: bytes, csv_bytes: bytes) -> None:
+def _envoyer_resultat(
+    graph, mailbox, adresses_resultat, source, res, raw: bytes, csv_bytes: bytes, prefixe_mail: str = "LS2PL",
+) -> None:
     corps = (
         f"<p>Conversion automatique effectuée pour <b>{source.client_id} / {source.code_pdv}</b> "
         f"({source.date_debut or '?'} → {source.date_fin or '?'}).</p>"
@@ -250,7 +257,7 @@ def _envoyer_resultat(graph, mailbox, adresses_resultat, source, res, raw: bytes
     )
     graph.send_mail(
         mailbox,
-        subject=f"[LS2PL] Conversion LightSpeed → Pennylane — {source.client_id}/{source.code_pdv} — {source.date_debut or ''}",
+        subject=f"[{prefixe_mail}] Conversion LS2PL — {source.client_id}/{source.code_pdv} — {source.date_debut or ''}",
         body_html=corps,
         # adresses_resultat = adresse_resultat du point de vente (Table de correspondance,
         # une ou plusieurs séparées par virgule/point-virgule) si renseignée, sinon
@@ -295,7 +302,7 @@ def _corps_notification_echec(
 
 def _notifier_echec_client(
     graph, mailbox, destinataires: list[str], sujet: str, filename: str, detail: str,
-    point_de_vente: str | None = None, periode: str | None = None,
+    point_de_vente: str | None = None, periode: str | None = None, prefixe_mail: str = "LS2PL",
 ) -> None:
     """Notifie, en plus de l'alerte interne (_alerter), le(s) destinataire(s)
     côté client concerné(s) par un échec — y compris quand l'adresse
@@ -311,7 +318,7 @@ def _notifier_echec_client(
         return
     graph.send_mail(
         mailbox,
-        subject=f"[LS2PL] {sujet}",
+        subject=f"[{prefixe_mail}] {sujet}",
         body_html=_corps_notification_echec(filename, detail, point_de_vente, periode),
         to_addresses=destinataires,
     )

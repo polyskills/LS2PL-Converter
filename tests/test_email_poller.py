@@ -14,7 +14,7 @@ import pytest
 from openpyxl import Workbook
 
 from core.app_config import APP_CONFIG_PATH
-from core.client_store import CLIENTS_DIR, create_client, set_azure_credentials
+from core.client_store import CLIENTS_DIR, create_client, get_prefixe_mail, set_azure_credentials, set_prefixe_mail
 from core.email_poller import _identifiants_azure, traiter_client
 from core.history_store import list_history
 from core.mapping_store import DEFAULT_MAPPINGS, load_mappings, save_mappings, set_pdv_adresse_email
@@ -95,6 +95,17 @@ def _client_pret(adresse: str, code_pdv: str = "REST") -> dict:
     return client
 
 
+def test_get_prefixe_mail_par_defaut_sans_reglage():
+    assert get_prefixe_mail({"id": "sans-prefixe"}) == "LS2PL"
+
+
+def test_set_puis_get_prefixe_mail():
+    client = create_client("Test Préfixe")
+    set_prefixe_mail(client["id"], "ASPP")
+    from core.client_store import get_client
+    assert get_prefixe_mail(get_client(client["id"])) == "ASPP"
+
+
 def test_client_sans_config_mail_ignore():
     client = create_client("Sans fetch")
     graph = FakeGraph()
@@ -157,6 +168,24 @@ def test_mail_avec_adresse_connue_convertit_et_repond():
     assert historique[0]["statut"] == "OK"
     assert historique[0]["point_de_vente"] == "REST"
     assert historique[0]["destinataires_email"] == ["rest@client.example.com"]
+    assert graph.sent[0]["subject"].startswith("[LS2PL] Conversion LS2PL — ")  # préfixe par défaut
+
+
+def test_mail_de_succes_utilise_le_prefixe_propre_au_client():
+    client = _client_pret("rest@client.example.com")
+    client["prefixe_mail"] = "ASPP"
+    graph = FakeGraph()
+    graph.messages.append(
+        {
+            "id": "m1",
+            "toRecipients": [{"emailAddress": {"address": "rest@client.example.com"}}],
+            "attachments": [("client_rest_business_export_accounting_20260810_20260811.xlsx", _build_sample_xlsx())],
+        }
+    )
+
+    traiter_client(graph, client)
+
+    assert graph.sent[0]["subject"].startswith("[ASPP] Conversion LS2PL — ")
 
 
 def test_mail_recu_via_alias_identifie_via_en_tete_to_brut():
@@ -328,6 +357,7 @@ def test_mail_avec_mapping_manquant_alerte_en_interne_et_le_client():
     assert "Échec de conversion" in interne["subject"]
     client_notif = next(m for m in graph.sent if m["to_addresses"] == ["rest@client.example.com"])
     assert "Échec" in client_notif["subject"]
+    assert client_notif["subject"].startswith("[LS2PL] ")  # préfixe par défaut, notification client uniquement
     corps = client_notif["body_html"]
     assert "client_rest_business_export_accounting_20260810_20260811.xlsx" in corps  # nom de fichier
     assert "REST" in corps  # point de vente

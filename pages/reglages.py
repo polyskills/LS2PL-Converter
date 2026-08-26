@@ -11,7 +11,14 @@ import json
 import streamlit as st
 
 from core.app_config import get_footer_sidebar, get_url_app, set_footer_sidebar, set_url_app
-from core.client_store import get_client, rename_client, set_azure_credentials, set_email_config
+from core.client_store import (
+    DEFAULT_PREFIXE_MAIL,
+    get_client,
+    rename_client,
+    set_azure_credentials,
+    set_email_config,
+    set_prefixe_mail,
+)
 from core.mapping_store import build_export_global_xlsx, load_mappings, save_mappings
 from core.self_update import appliquer_mise_a_jour, redemarrer_apres_delai, verifier_mise_a_jour
 from core.timezone import now_local
@@ -104,6 +111,21 @@ with tab_email:
         st.success("✅ Config mail enregistrée.")
 
     st.divider()
+    st.markdown("**Préfixe des mails du fetch automatique**")
+    st.caption(
+        "Préfixe entre crochets utilisé dans le sujet des mails envoyés à ce client (résultat de "
+        "conversion, notifications d'échec) — ex. « ASPP » donne des sujets du type « [ASPP] "
+        f"Conversion LS2PL — ... ». Laisser vide pour reprendre la valeur par défaut (« {DEFAULT_PREFIXE_MAIL} »)."
+    )
+    prefixe_mail = st.text_input("Préfixe des mails", value=client.get("prefixe_mail", ""))
+    if st.button("💾 Enregistrer le préfixe des mails"):
+        set_prefixe_mail(client_id, prefixe_mail)
+        st.session_state["_prefixe_mail_enregistre"] = True
+        st.rerun()
+    if st.session_state.pop("_prefixe_mail_enregistre", None):
+        st.success("✅ Préfixe des mails enregistré.")
+
+    st.divider()
     st.markdown("**App Azure AD de ce client**")
     st.caption(
         "ID d'application et secret client de l'app Azure AD créée dans le tenant de ce client "
@@ -168,6 +190,7 @@ with tab_sauvegarde:
                 "email_mailbox": client.get("email_mailbox", ""),
                 "azure_client_id": client.get("azure_client_id", ""),
                 "azure_client_secret": client.get("azure_client_secret", ""),
+                "prefixe_mail": client.get("prefixe_mail", ""),
             },
         }
         contenu_json = json.dumps(sauvegarde, ensure_ascii=False, indent=2)
@@ -272,6 +295,7 @@ with tab_sauvegarde:
                                 reglages_client_a_restaurer.get("azure_client_id", ""),
                                 reglages_client_a_restaurer.get("azure_client_secret", ""),
                             )
+                            set_prefixe_mail(client_id, reglages_client_a_restaurer.get("prefixe_mail", ""))
                         if renommage_prevu:
                             rename_client(client_id, nom_a_restaurer)
                         st.session_state["_restauration_reussie"] = True
