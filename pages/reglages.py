@@ -325,17 +325,27 @@ with tab_infos:
             if resultat_maj["succes"]:
                 st.session_state.pop("_maj_confirmation", None)
                 st.session_state.pop("_maj_verification", None)
-                st.success(
-                    f"✅ Mise à jour appliquée (commit `{resultat_maj['nouveau_commit']}`)"
-                    + (" — dépendances réinstallées." if resultat_maj["dependances_reinstallees"] else ".")
-                    + " Redémarrage en cours : rechargez la page dans quelques secondes."
-                )
+                # Sans rerun ici, les deux boutons de confirmation (déjà dessinés plus haut dans
+                # ce même passage de script) resteraient affichés sous le message de succès -
+                # trompeur, on dirait la mise à jour non prise en compte. redemarrer_apres_delai()
+                # est appelé AVANT le rerun : il programme juste un minuteur en tâche de fond, le
+                # rerun qui suit ne l'annule pas.
+                st.session_state["_maj_resultat"] = resultat_maj
                 redemarrer_apres_delai()
+                st.rerun()
             else:
                 st.error(f"❌ Échec de la mise à jour : {resultat_maj['erreur']}")
         if cm2.button("Annuler la mise à jour"):
             st.session_state.pop("_maj_confirmation", None)
             st.rerun()
+
+    resultat_maj_affiche = st.session_state.get("_maj_resultat")
+    if resultat_maj_affiche:
+        st.success(
+            f"✅ Mise à jour appliquée (commit `{resultat_maj_affiche['nouveau_commit']}`)"
+            + (" — dépendances réinstallées." if resultat_maj_affiche["dependances_reinstallees"] else ".")
+            + " Redémarrage en cours : rechargez la page dans quelques secondes."
+        )
 
     st.divider()
     st.subheader("🖋️ Pied de page du menu latéral")
