@@ -304,13 +304,6 @@ with tab_sauvegarde:
                         st.rerun()
 
 with tab_infos:
-    st.subheader("🔧 Informations techniques")
-    st.caption(
-        "Anciennement dans le menu latéral de chaque page ; rassemblé ici pour désencombrer la navigation."
-    )
-    render_infos_techniques(client_id)
-
-    st.divider()
     st.subheader("🔄 Mise à jour de l'application")
     st.caption(
         "Récupère et installe la dernière version publiée sur la branche suivie, sans passer par un "
@@ -417,6 +410,13 @@ with tab_infos:
             """,
             height=0,
         )
+
+    st.divider()
+    st.subheader("🔧 Informations techniques")
+    st.caption(
+        "Anciennement dans le menu latéral de chaque page ; rassemblé ici pour désencombrer la navigation."
+    )
+    render_infos_techniques(client_id)
 
     st.divider()
     st.subheader("🖋️ Pied de page du menu latéral")
