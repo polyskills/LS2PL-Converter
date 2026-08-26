@@ -57,13 +57,16 @@ def _selecteur_tri(colonnes: dict[str, str], defaut: str, cle: str) -> tuple[str
     cles_colonnes = list(colonnes.keys())
     libelles = list(colonnes.values())
     index_defaut = cles_colonnes.index(defaut) if defaut in cles_colonnes else 0
-    c1, c2 = st.columns([3, 1])
-    choix = c1.selectbox("Trier par", options=libelles, index=index_defaut, key=f"tri_colonne_{cle}")
-    # st.checkbox n'a pas de libellé au-dessus contrairement à st.selectbox : sans cet espaceur,
-    # la case se retrouve collée en haut de sa colonne, décalée par rapport au widget de tri
-    # lui-même plutôt qu'alignée avec lui.
-    c2.markdown("<div style='height: 1.9rem;'></div>", unsafe_allow_html=True)
-    decroissant = c2.checkbox("Ordre décroissant", key=f"tri_decroissant_{cle}")
+    # Libellé "Trier par" à GAUCHE du menu (plutôt qu'au-dessus, par défaut avec st.selectbox) pour
+    # tenir sur une seule ligne compacte : label masqué sur le widget lui-même, remplacé par une
+    # colonne de texte dédiée. vertical_alignment="center" aligne les 3 colonnes (texte, menu,
+    # case) sur le centre du plus grand élément (le menu déroulant), sans espaceur manuel.
+    c1, c2, c3 = st.columns([1, 3, 1.3], vertical_alignment="center")
+    c1.markdown("Trier par")
+    choix = c2.selectbox(
+        "Trier par", options=libelles, index=index_defaut, key=f"tri_colonne_{cle}", label_visibility="collapsed"
+    )
+    decroissant = c3.checkbox("Ordre décroissant", key=f"tri_decroissant_{cle}")
     return cles_colonnes[libelles.index(choix)], decroissant
 
 
