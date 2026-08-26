@@ -257,7 +257,7 @@ def _envoyer_resultat(
     )
     graph.send_mail(
         mailbox,
-        subject=f"[{prefixe_mail}] Conversion LS2PL — {source.client_id}/{source.code_pdv} — {source.date_debut or ''}",
+        subject=f"[{prefixe_mail}] LS2PL - {source.client_id.upper()}/{source.code_pdv} - {source.date_debut or ''}",
         body_html=corps,
         # adresses_resultat = adresse_resultat du point de vente (Table de correspondance,
         # une ou plusieurs séparées par virgule/point-virgule) si renseignée, sinon

@@ -168,7 +168,8 @@ def test_mail_avec_adresse_connue_convertit_et_repond():
     assert historique[0]["statut"] == "OK"
     assert historique[0]["point_de_vente"] == "REST"
     assert historique[0]["destinataires_email"] == ["rest@client.example.com"]
-    assert graph.sent[0]["subject"].startswith("[LS2PL] Conversion LS2PL — ")  # préfixe par défaut
+    # préfixe par défaut, "LS2PL" sans "Conversion", client_id en MAJUSCULES, tirets simples
+    assert graph.sent[0]["subject"].startswith(f"[LS2PL] LS2PL - {client['id'].upper()}/REST - ")
 
 
 def test_mail_de_succes_utilise_le_prefixe_propre_au_client():
@@ -185,7 +186,7 @@ def test_mail_de_succes_utilise_le_prefixe_propre_au_client():
 
     traiter_client(graph, client)
 
-    assert graph.sent[0]["subject"].startswith("[ASPP] Conversion LS2PL — ")
+    assert graph.sent[0]["subject"].startswith(f"[ASPP] LS2PL - {client['id'].upper()}/REST - ")
 
 
 def test_mail_recu_via_alias_identifie_via_en_tete_to_brut():
