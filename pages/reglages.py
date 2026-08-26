@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from core.app_config import get_footer_sidebar, get_url_app, set_footer_sidebar, set_url_app
 from core.client_store import (
@@ -366,7 +367,34 @@ with tab_infos:
         st.success(
             f"✅ Mise à jour appliquée (commit `{resultat_maj_affiche['nouveau_commit']}`)"
             + (" — dépendances réinstallées." if resultat_maj_affiche["dependances_reinstallees"] else ".")
-            + " Redémarrage en cours : rechargez la page dans quelques secondes."
+            + " Redémarrage en cours — vous allez être redirigé automatiquement dès que "
+            "l'application est de nouveau disponible."
+        )
+        # Naviguer vers une autre page pendant le redémarrage affiche un écran cassé : les pages
+        # Streamlit changent d'écran SANS recharger le navigateur (même connexion WebSocket
+        # réutilisée), or celle-ci est coupée par le redémarrage du process - contrairement à un
+        # vrai rechargement de page (F5, ou retour sur /), qui rouvre une connexion fraîche et
+        # fonctionne toujours. Plutôt que de compter sur l'utilisateur pour deviner qu'il faut
+        # recharger manuellement (confusion : "le site ne fonctionne plus" alors que ce n'est
+        # qu'un souci de reconnexion côté navigateur), on sonde nous-mêmes la disponibilité du
+        # serveur et on redirige automatiquement vers la racine du site dès qu'il répond de nouveau.
+        components.html(
+            r"""
+            <script>
+            function attendreEtRedemarrer() {
+                fetch(window.parent.location.origin + "/_stcore/health", {cache: "no-store"})
+                    .then(r => {
+                        if (r.ok) window.parent.location.href = window.parent.location.origin;
+                        else setTimeout(attendreEtRedemarrer, 1500);
+                    })
+                    .catch(() => setTimeout(attendreEtRedemarrer, 1500));
+            }
+            // Laisse le temps au process de sortir avant de commencer à sonder
+            // (redemarrer_apres_delai programme la sortie ~2s après l'appel, pas immédiatement).
+            setTimeout(attendreEtRedemarrer, 3000);
+            </script>
+            """,
+            height=0,
         )
 
     st.divider()
