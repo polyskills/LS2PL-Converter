@@ -58,9 +58,24 @@ def build_pennylane_workbook(resultats: list[ConversionResult]) -> bytes:
                     cell.number_format = "#,##0.00"
             row_idx += 1
 
-    widths = [10, 10, 14, 30, 26, 12, 10, 24, 14, 12, 10, 20, 14, 10, 12, 12, 12]
-    for i, w in enumerate(widths, start=1):
-        ws.column_dimensions[get_column_letter(i)].width = w
+    # Largeurs de base par colonne (lisible pour les valeurs courtes habituelles),
+    # mais élargies au contenu réel quand il dépasse - ex. « Catégorie » reprend
+    # l'intitulé complet du code analytique (potentiellement long, cf.
+    # core.mapping_store), une largeur fixe trop courte le tronquait visuellement
+    # à l'ouverture dans Excel (même si la valeur en cellule était complète).
+    largeurs_base = [10, 10, 14, 30, 26, 12, 10, 24, 14, 12, 10, 20, 14, 10, 12, 12, 12]
+    plafond = 60
+    for i, (name, largeur_min) in enumerate(zip(PENNYLANE_COLUMNS, largeurs_base), start=1):
+        plus_long = max(
+            [len(name)] + [len(str(l.get(name, ""))) for res in resultats for l in res.lignes if l.get(name) not in (None, "")],
+            default=len(name),
+        )
+        largeur_naturelle = plus_long + 2
+        lettre = get_column_letter(i)
+        ws.column_dimensions[lettre].width = min(max(largeur_min, largeur_naturelle), plafond)
+        if largeur_naturelle > plafond:
+            for cell in ws[lettre][1:]:  # [1:] saute l'en-tête (ligne 1)
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
     ws.freeze_panes = "A2"
 
     buf = io.BytesIO()
