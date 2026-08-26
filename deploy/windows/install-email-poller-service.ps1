@@ -32,6 +32,13 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# Sur PowerShell 7.3+, la seule présence d'un écrit sur stderr par un .exe externe (même
+# anodin, ex. nssm.exe signalant qu'un service n'existe pas encore) devient par défaut une
+# erreur bloquante avec $ErrorActionPreference = "Stop" — sans lien avec le code de sortie
+# réel de la commande. Revient au comportement historique (seule une vraie exception .NET ou
+# un $LASTEXITCODE vérifié explicitement arrête le script). Ignoré sans effet sur Windows
+# PowerShell 5.1, qui ne connaît pas cette variable.
+$PSNativeCommandUseErrorActionPreference = $false
 
 function Assert-Admin {
     $current = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -72,8 +79,12 @@ if (-not (Test-Path $NssmExe)) {
     throw "NSSM introuvable — lancez d'abord install-service.ps1."
 }
 
-$existing = & $NssmExe status $ServiceName 2>$null
-if ($LASTEXITCODE -eq 0) {
+# Get-Service (cmdlet native PowerShell), pas "nssm status" : sur PowerShell 7.3+,
+# $ErrorActionPreference = "Stop" transforme en erreur bloquante tout .exe qui écrit sur
+# stderr - y compris "nssm status" sur un service qui n'existe pas encore (cas normal au
+# tout premier lancement), et ce même avec 2>$null (la redirection masque le texte mais
+# pas la sémantique d'erreur native de PowerShell).
+if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
     Write-Host "Le service '$ServiceName' existe déjà : arrêt et suppression avant réinstallation..."
     & $NssmExe stop $ServiceName confirm | Out-Null
     & $NssmExe remove $ServiceName confirm | Out-Null

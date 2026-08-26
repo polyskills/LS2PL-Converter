@@ -13,6 +13,11 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# Sur PowerShell 7.3+, la seule présence d'un écrit sur stderr par un .exe externe (même
+# anodin, ex. nssm.exe) devient par défaut une erreur bloquante avec
+# $ErrorActionPreference = "Stop" — sans lien avec le code de sortie réel de la commande.
+# Revient au comportement historique. Ignoré sans effet sur Windows PowerShell 5.1.
+$PSNativeCommandUseErrorActionPreference = $false
 
 $RepoRoot = Get-Location
 if (-not (Test-Path (Join-Path $RepoRoot "app.py"))) {
