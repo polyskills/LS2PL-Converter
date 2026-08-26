@@ -241,9 +241,12 @@ with tab_codes_analytiques:
         edited_codes_analytiques_df, client_id, "codes_analytiques", "Codes Analytique PL", key="export_codes_analytiques"
     )
     # Même choix que pour comptes_options ci-dessus : basé sur l'état enregistré, pas le live.
-    codes_analytiques_options = _options_avec_libelle(
-        mappings.get("codes_analytiques", []), "code_analytique", "description"
-    )
+    # Pas de "code - description" ici (contrairement à comptes_options) : le code analytique EST
+    # potentiellement déjà la chaîne longue à afficher (ex. "ASPP - Alcools & Cocktails alcoolisés"),
+    # la description n'est qu'un complément d'information optionnel, pas systématiquement affiché.
+    codes_analytiques_options = [
+        c["code_analytique"] for c in mappings.get("codes_analytiques", []) if c.get("code_analytique")
+    ]
 
 with tab_departements:
     st.markdown(
@@ -426,9 +429,11 @@ with tab_attribution:
             {
                 "Point de vente": pdv,
                 "Compte": _affichage_depuis_code(compte, mappings.get("comptes_de_vente", []), "compte", "libelle_compte"),
-                "Code analytique": _affichage_depuis_code(
-                    code, mappings.get("codes_analytiques", []), "code_analytique", "description"
-                ),
+                # Le code analytique est affiché tel qu'enregistré, sans concaténer la description :
+                # c'est le code lui-même qui porte l'information complète (ex. "ASPP - Alcools &
+                # Cocktails alcoolisés"), la description n'est qu'un complément optionnel, pas
+                # systématiquement affiché ici.
+                "Code analytique": code,
                 "Famille": famille,
                 "Départements": _departements_affiches(groupes[(pdv, compte, code, famille)]),
             }
@@ -517,7 +522,10 @@ with tab_attribution:
         f_code_affiche = fc4.selectbox(
             "Code analytique",
             options=codes_analytiques_options,
-            index=_index_ou_none(selected_key[2], codes_analytiques_options) if selected_key else None,
+            # Correspondance exacte, pas _index_ou_none (qui coupe au premier " - ") : le code
+            # analytique peut légitimement contenir lui-même un tiret (ex. "ASPP - Alcools & ...").
+            index=codes_analytiques_options.index(selected_key[2])
+            if selected_key and selected_key[2] in codes_analytiques_options else None,
             placeholder="Choisir un code",
         )
         f_departements = st.multiselect(
@@ -554,7 +562,10 @@ with tab_attribution:
             st.error("Compte, point de vente, au moins un département et code analytique sont obligatoires.")
         else:
             f_compte = _code_depuis_affichage(f_compte_affiche)
-            f_code = _code_depuis_affichage(f_code_affiche)
+            # f_code_affiche est déjà le code brut (codes_analytiques_options n'est plus une liste
+            # "code - description") : pas de _code_depuis_affichage ici, qui couperait à tort un
+            # code analytique contenant lui-même un tiret.
+            f_code = f_code_affiche
             mappings_actuels = load_mappings(client_id)
             lignes = mappings_actuels.setdefault("comptes_analytiques", [])
 

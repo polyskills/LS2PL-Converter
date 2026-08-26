@@ -136,5 +136,7 @@ def test_build_export_global_xlsx_attribution_analytique_groupee_pas_eclatee():
     assert len(rows) == 2  # en-tête + UNE seule ligne pour le groupe (pas 3)
     assert rows[1][0] == "REST"
     assert rows[1][1] == "70110010 - Ventes solides"
-    assert rows[1][2] == "REST - Restaurant"
+    # Code analytique affiché tel quel, sans concaténer la description (contrairement à "compte") :
+    # le code peut déjà être la chaîne longue à afficher (ex. "ASPP - Alcools & Cocktails alcoolisés").
+    assert rows[1][2] == "REST"
     assert rows[1][4] == "Cuisine - Dessert, Cuisine - Entrée, Cuisine - Plat"

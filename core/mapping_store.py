@@ -357,12 +357,14 @@ def _groupes_attribution_analytique(mappings: dict) -> list[dict]:
         groupes.setdefault(cle, []).append(a.get("categorie_lightspeed", ""))
 
     comptes_de_vente = mappings.get("comptes_de_vente", [])
-    codes_analytiques = mappings.get("codes_analytiques", [])
     return [
         {
             "point_de_vente": pdv,
             "compte": _affichage_code_libelle(compte, comptes_de_vente, "compte", "libelle_compte"),
-            "code_analytique": _affichage_code_libelle(code, codes_analytiques, "code_analytique", "description"),
+            # Contrairement à "compte" (code court + libellé séparé), le code analytique est déjà la
+            # chaîne complète à afficher (ex. "ASPP - Alcools & Cocktails alcoolisés") : la description
+            # n'est qu'un complément optionnel, pas concaténée ici.
+            "code_analytique": code,
             "famille": famille,
             "departements": ", ".join(sorted((d for d in deps if d), key=str.casefold)),
         }
