@@ -59,6 +59,10 @@ def _selecteur_tri(colonnes: dict[str, str], defaut: str, cle: str) -> tuple[str
     index_defaut = cles_colonnes.index(defaut) if defaut in cles_colonnes else 0
     c1, c2 = st.columns([3, 1])
     choix = c1.selectbox("Trier par", options=libelles, index=index_defaut, key=f"tri_colonne_{cle}")
+    # st.checkbox n'a pas de libellé au-dessus contrairement à st.selectbox : sans cet espaceur,
+    # la case se retrouve collée en haut de sa colonne, décalée par rapport au widget de tri
+    # lui-même plutôt qu'alignée avec lui.
+    c2.markdown("<div style='height: 1.9rem;'></div>", unsafe_allow_html=True)
     decroissant = c2.checkbox("Ordre décroissant", key=f"tri_decroissant_{cle}")
     return cles_colonnes[libelles.index(choix)], decroissant
 
