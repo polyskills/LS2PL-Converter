@@ -15,7 +15,9 @@ from core.timezone import now_local
 from core.ui_common import select_client
 
 
-def _as_editable_df(rows: list[dict], columns: list[str], tri: str | list[str] | None = None) -> pd.DataFrame:
+def _as_editable_df(
+    rows: list[dict], columns: list[str], tri: str | list[str] | None = None, decroissant: bool = False
+) -> pd.DataFrame:
     """st.data_editor ne sait pas proposer de bouton '+' d'ajout de ligne sur une
     liste Python vide : sans colonnes connues, il n'a rien à afficher. On force
     donc toujours un DataFrame avec les colonnes attendues, même à 0 ligne.
@@ -29,18 +31,36 @@ def _as_editable_df(rows: list[dict], columns: list[str], tri: str | list[str] |
     partout, plutôt que de le laisser deviner par pandas.
 
     tri : colonne(s) selon laquelle trier alphabétiquement (insensible à la
-    casse) avant affichage. Streamlit désactive le tri interactif (clic sur
-    l'en-tête) dès que num_rows="dynamic" (nécessaire ici pour pouvoir
-    ajouter/supprimer des lignes) : impossible d'avoir les deux à la fois côté
-    composant, donc on trie nous-mêmes la donnée en amont plutôt que de
-    sacrifier l'ajout/suppression en ligne."""
+    casse) avant affichage — cf. _selecteur_tri, qui laisse la choisir parmi
+    TOUTES les colonnes de la table plutôt qu'une seule figée. Streamlit
+    désactive le tri interactif natif (clic sur l'en-tête) dès que
+    num_rows="dynamic" (nécessaire ici pour pouvoir ajouter/supprimer des
+    lignes) : impossible d'avoir les deux à la fois côté composant, donc on
+    trie nous-mêmes la donnée en amont plutôt que de sacrifier l'ajout/
+    suppression en ligne."""
     if not rows:
         return pd.DataFrame(columns=columns)
     df = pd.DataFrame(rows).reindex(columns=columns).fillna("").astype(str)
     if tri:
         cles = [tri] if isinstance(tri, str) else tri
-        df = df.sort_values(by=cles, key=lambda s: s.str.casefold(), kind="stable").reset_index(drop=True)
+        df = df.sort_values(
+            by=cles, key=lambda s: s.str.casefold(), kind="stable", ascending=not decroissant
+        ).reset_index(drop=True)
     return df
+
+
+def _selecteur_tri(colonnes: dict[str, str], defaut: str, cle: str) -> tuple[str, bool]:
+    """Sélecteur « Trier par » + case « ordre décroissant », affiché au-dessus
+    d'un tableau éditable — remplace le tri interactif natif indisponible sur
+    ces tableaux (cf. _as_editable_df), en couvrant TOUTES leurs colonnes
+    plutôt qu'une seule figée. colonnes : {clé de donnée: libellé affiché}."""
+    cles_colonnes = list(colonnes.keys())
+    libelles = list(colonnes.values())
+    index_defaut = cles_colonnes.index(defaut) if defaut in cles_colonnes else 0
+    c1, c2 = st.columns([3, 1])
+    choix = c1.selectbox("Trier par", options=libelles, index=index_defaut, key=f"tri_colonne_{cle}")
+    decroissant = c2.checkbox("Ordre décroissant", key=f"tri_decroissant_{cle}")
+    return cles_colonnes[libelles.index(choix)], decroissant
 
 
 def _csv_bytes(df: pd.DataFrame) -> bytes:
@@ -157,11 +177,23 @@ with tab_pdv:
         "pour les envoyer ailleurs à la place (ex. la comptable, une adresse de suivi dédiée...). Plusieurs "
         "destinataires possibles, séparés par une virgule ou un point-virgule."
     )
+    tri_pdv, decroissant_pdv = _selecteur_tri(
+        {
+            "code": "Code point de vente",
+            "libelle": "Libellé",
+            "adresse_email": "Adresse mail de réception",
+            "adresse_resultat": "Adresse mail de résultat",
+            "commentaires": "Commentaires",
+        },
+        defaut="code",
+        cle="pdv",
+    )
     edited_pdv_df = st.data_editor(
         _as_editable_df(
             mappings.get("points_de_vente", []),
             ["code", "libelle", "adresse_email", "adresse_resultat", "commentaires"],
-            tri="code",
+            tri=tri_pdv,
+            decroissant=decroissant_pdv,
         ),
         num_rows="dynamic",
         use_container_width=True,
@@ -193,9 +225,17 @@ with tab_comptes:
         "« Attribution analytique » — c'est *là-bas* que se fait le lien avec les catégories "
         "LightSpeed, pas ici."
     )
+    tri_comptes, decroissant_comptes = _selecteur_tri(
+        {"compte": "Compte", "libelle_compte": "Libellé du compte", "commentaires": "Commentaires"},
+        defaut="compte",
+        cle="comptes",
+    )
     edited_comptes_df = st.data_editor(
         _as_editable_df(
-            mappings.get("comptes_de_vente", []), ["compte", "libelle_compte", "commentaires"], tri="compte"
+            mappings.get("comptes_de_vente", []),
+            ["compte", "libelle_compte", "commentaires"],
+            tri=tri_comptes,
+            decroissant=decroissant_comptes,
         ),
         num_rows="dynamic",
         use_container_width=True,
@@ -223,11 +263,17 @@ with tab_codes_analytiques:
         "l'onglet « Attribution analytique », qui décide *quand* utiliser quel code ; ce n'est pas le "
         "cas ici."
     )
+    tri_codes, decroissant_codes = _selecteur_tri(
+        {"code_analytique": "Code analytique", "description": "Description", "commentaires": "Commentaires"},
+        defaut="code_analytique",
+        cle="codes_analytiques",
+    )
     edited_codes_analytiques_df = st.data_editor(
         _as_editable_df(
             mappings.get("codes_analytiques", []),
             ["code_analytique", "description", "commentaires"],
-            tri="code_analytique",
+            tri=tri_codes,
+            decroissant=decroissant_codes,
         ),
         num_rows="dynamic",
         use_container_width=True,
@@ -280,11 +326,23 @@ with tab_departements:
         }
         for d in mappings.get("departements", [])
     ]
+    tri_departements, decroissant_departements = _selecteur_tri(
+        {
+            "categorie_lightspeed": "Département LightSpeed",
+            "compte": "Compte de vente",
+            "taux_tva": "Taux TVA nominal",
+            "affecte": "Attribution analytique",
+            "commentaires": "Commentaires",
+        },
+        defaut="categorie_lightspeed",
+        cle="departements",
+    )
     edited_departements_df = st.data_editor(
         _as_editable_df(
             departements_source,
             ["categorie_lightspeed", "compte", "taux_tva", "affecte", "commentaires"],
-            tri="categorie_lightspeed",
+            tri=tri_departements,
+            decroissant=decroissant_departements,
         ),
         num_rows="dynamic",
         use_container_width=True,
@@ -318,11 +376,22 @@ with tab_paiement:
         "plateforme) dans Pennylane. Un mode de paiement non mappé bloque également l'export "
         "(l'écriture serait déséquilibrée)."
     )
+    tri_paiement, decroissant_paiement = _selecteur_tri(
+        {
+            "mode_paiement": "Mode de paiement LightSpeed",
+            "compte": "Compte de contrepartie",
+            "libelle_compte": "Libellé du compte",
+            "commentaires": "Commentaires",
+        },
+        defaut="mode_paiement",
+        cle="paiement",
+    )
     edited_paiement_df = st.data_editor(
         _as_editable_df(
             mappings.get("comptes_paiement", []),
             ["mode_paiement", "compte", "libelle_compte", "commentaires"],
-            tri="mode_paiement",
+            tri=tri_paiement,
+            decroissant=decroissant_paiement,
         ),
         num_rows="dynamic",
         use_container_width=True,
@@ -347,11 +416,22 @@ with tab_pourboires:
         "non nul sur l'export mais absent d'ici bloque l'export, comme un mode de paiement non "
         "mappé dans « Moyens de paiements »."
     )
+    tri_pourboires, decroissant_pourboires = _selecteur_tri(
+        {
+            "mode_paiement": "Mode de paiement LightSpeed",
+            "compte": "Compte crédité du pourboire",
+            "libelle_compte": "Libellé du compte",
+            "commentaires": "Commentaires",
+        },
+        defaut="mode_paiement",
+        cle="pourboires",
+    )
     edited_pourboires_df = st.data_editor(
         _as_editable_df(
             mappings.get("comptes_pourboires", []),
             ["mode_paiement", "compte", "libelle_compte", "commentaires"],
-            tri="mode_paiement",
+            tri=tri_pourboires,
+            decroissant=decroissant_pourboires,
         ),
         num_rows="dynamic",
         use_container_width=True,
@@ -377,9 +457,17 @@ with tab_paiement_ignores:
         "⚠️ À réserver aux lignes sans valeur comptable propre — jamais pour écarter un montant réel "
         "dont on ne sait juste pas où l'imputer (ça, c'est le rôle du compte d'écart, page Réglages)."
     )
+    tri_paiement_ignores, decroissant_paiement_ignores = _selecteur_tri(
+        {"mode_paiement": "Mode de paiement à ignorer", "commentaires": "Commentaires"},
+        defaut="mode_paiement",
+        cle="paiement_ignores",
+    )
     edited_paiement_ignores_df = st.data_editor(
         _as_editable_df(
-            mappings.get("modes_paiement_ignores", []), ["mode_paiement", "commentaires"], tri="mode_paiement"
+            mappings.get("modes_paiement_ignores", []),
+            ["mode_paiement", "commentaires"],
+            tri=tri_paiement_ignores,
+            decroissant=decroissant_paiement_ignores,
         ),
         num_rows="dynamic",
         use_container_width=True,
@@ -399,9 +487,22 @@ with tab_paiement_ignores:
 
 with tab_tva:
     st.markdown("Compte de **TVA collectée** à utiliser pour chaque taux de TVA rencontré dans les ventes.")
+    tri_tva, decroissant_tva = _selecteur_tri(
+        {
+            "taux": "Taux de TVA",
+            "compte": "Compte de TVA collectée",
+            "libelle_compte": "Libellé du compte",
+            "commentaires": "Commentaires",
+        },
+        defaut="taux",
+        cle="tva",
+    )
     edited_tva_df = st.data_editor(
         _as_editable_df(
-            mappings.get("comptes_tva", []), ["taux", "compte", "libelle_compte", "commentaires"], tri="taux"
+            mappings.get("comptes_tva", []),
+            ["taux", "compte", "libelle_compte", "commentaires"],
+            tri=tri_tva,
+            decroissant=decroissant_tva,
         ),
         num_rows="dynamic",
         use_container_width=True,
@@ -426,14 +527,7 @@ with tab_attribution:
         "nécessaires : un même compte peut porter un code analytique différent selon le département, "
         "même sur un seul et même point de vente (ex. un compte de boisson peut être « Sommellerie » "
         "ou « Bar » selon le département d'origine). Toute combinaison rencontrée à la conversion et "
-        "absente d'ici bloquera l'export.\n\n"
-        "⚠️ Cette table part de l'hypothèse que la combinaison (compte, point de vente, département) "
-        "suffit à déterminer le code analytique dans tous les cas — à valider avec un exemple réel : "
-        "si certains cas s'avèrent plus dynamiques (règle non réductible à cette combinaison), cette "
-        "table ne sera pas suffisante et il faudra revoir l'approche.\n\n"
-        "**Aucun bouton « Enregistrer » ici** : chaque action (créer, modifier, supprimer) écrit "
-        "directement dans le référentiel, indépendamment du bouton tout en bas de page (qui ne "
-        "concerne que les autres onglets)."
+        "absente d'ici bloquera l'export."
     )
     # Même choix que pour comptes_options : basé sur l'état enregistré, pas le live des autres onglets.
     departements_options = [
