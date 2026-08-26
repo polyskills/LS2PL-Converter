@@ -458,6 +458,16 @@ with tab_attribution:
             on_select="rerun",
             selection_mode="single-row",
             key=table_key,
+            # Sans largeur explicite, Streamlit compresse chaque colonne par défaut : "Compte" et
+            # "Code analytique" ("ASPP - Alcools & Cocktails alcoolisés") se retrouvaient coupés à
+            # l'affichage bien que la donnée complète soit là — impossible de distinguer deux lignes
+            # partageant le même préfixe de code. La valeur n'était jamais tronquée, seulement son
+            # rendu visuel.
+            column_config={
+                "Compte": st.column_config.TextColumn("Compte", width="large"),
+                "Code analytique": st.column_config.TextColumn("Code analytique", width="large"),
+                "Départements": st.column_config.TextColumn("Départements", width="large"),
+            },
         )
 
     if not groupes_df.empty:
