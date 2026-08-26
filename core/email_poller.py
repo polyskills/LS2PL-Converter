@@ -196,7 +196,7 @@ def _traiter_piece_jointe(
     record_conversion(source.client_id, res, raw, csv_bytes, horodatage, destinataires_email=adresses_notification)
 
     if res.sans_erreur:
-        _envoyer_resultat(graph, mailbox, adresses_notification, source, res, raw, csv_bytes, prefixe_mail)
+        _envoyer_resultat(graph, mailbox, adresses_notification, source, res, raw, csv_bytes, date_piece, prefixe_mail)
     else:
         detail = "\n".join(res.erreurs)
         if source.avertissement:
@@ -241,8 +241,18 @@ def _pied_de_page_lien_app() -> str:
     )
 
 
+def _date_fichier(date_piece: str) -> str:
+    """Convertit une date de pièce "dd/mm/aa" (format utilisé pour la pièce
+    comptable, cf. numero_piece) en "AAAAMMJJ" pour un nom de fichier — même
+    convention que les exports LightSpeed source. Suppose le XXIe siècle
+    (2000+aa), sans ambiguïté pour un usage courant de l'application."""
+    d, m, y = date_piece.split("/")
+    return f"20{y}{m}{d}"
+
+
 def _envoyer_resultat(
-    graph, mailbox, adresses_resultat, source, res, raw: bytes, csv_bytes: bytes, prefixe_mail: str = "LS2PL",
+    graph, mailbox, adresses_resultat, source, res, raw: bytes, csv_bytes: bytes, date_piece: str,
+    prefixe_mail: str = "LS2PL",
 ) -> None:
     corps = (
         f"<p>Conversion automatique effectuée pour <b>{source.client_id} / {source.code_pdv}</b> "
@@ -264,7 +274,10 @@ def _envoyer_resultat(
         # l'adresse de réception d'origine (fallback résolu par l'appelant, jamais
         # l'alerte interne) — cf. docstring du module.
         to_addresses=adresses_resultat,
-        attachments=[(res.source_filename, raw), (f"import_pennylane_{res.point_de_vente}.csv", csv_bytes)],
+        attachments=[
+            (res.source_filename, raw),
+            (f"import_pl_{source.client_id}_{source.code_pdv}_{_date_fichier(date_piece)}.csv", csv_bytes),
+        ],
     )
 
 

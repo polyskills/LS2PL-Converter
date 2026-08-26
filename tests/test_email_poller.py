@@ -171,6 +171,9 @@ def test_mail_avec_adresse_connue_convertit_et_repond():
     # préfixe par défaut, "LS2PL" sans "Conversion", client_id en MAJUSCULES, tirets simples
     assert graph.sent[0]["subject"].startswith(f"[LS2PL] LS2PL - {client['id'].upper()}/REST - ")
 
+    nom_csv_genere = graph.sent[0]["attachments"][1][0]
+    assert nom_csv_genere == f"import_pl_{client['id']}_REST_20260810.csv"
+
 
 def test_mail_de_succes_utilise_le_prefixe_propre_au_client():
     client = _client_pret("rest@client.example.com")
