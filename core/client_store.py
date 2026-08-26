@@ -22,6 +22,30 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CLIENTS_DIR = os.path.join(BASE_DIR, "data", "clients")
 CLIENTS_INDEX = os.path.join(CLIENTS_DIR, "index.json")
 
+# Identifiants des clients explicitement supprimés via delete_client() — sert
+# UNIQUEMENT à empêcher ensure_client() (core.bootstrap.ensure_defaults, rejoué
+# à CHAQUE rendu de page) de recréer instantanément un client par défaut
+# (Paris/Valence) juste supprimé : sans ce garde-fou, le client réapparaissait
+# au rendu suivant, donnant l'impression que la suppression ne fonctionnait
+# pas. N'affecte jamais une création explicite (create_client) : cf. l'ordre
+# des vérifications dans ensure_client() plus bas.
+CLIENTS_SUPPRIMES = os.path.join(CLIENTS_DIR, "_supprimes.json")
+
+
+def _lire_supprimes() -> set[str]:
+    if not os.path.exists(CLIENTS_SUPPRIMES):
+        return set()
+    with open(CLIENTS_SUPPRIMES, "r", encoding="utf-8") as f:
+        return set(json.load(f))
+
+
+def _marquer_supprime(client_id: str) -> None:
+    supprimes = _lire_supprimes()
+    supprimes.add(client_id)
+    os.makedirs(CLIENTS_DIR, exist_ok=True)
+    with open(CLIENTS_SUPPRIMES, "w", encoding="utf-8") as f:
+        json.dump(sorted(supprimes), f, ensure_ascii=False, indent=2)
+
 
 def _slugify(nom: str) -> str:
     s = unicodedata.normalize("NFKD", nom).encode("ascii", "ignore").decode("ascii")
@@ -67,19 +91,37 @@ def create_client(nom: str) -> dict:
 
     os.makedirs(client_dir(client_id), exist_ok=True)
     os.makedirs(os.path.join(client_dir(client_id), "history", "files"), exist_ok=True)
+    # Recréer explicitement un client anciennement supprimé (même identifiant,
+    # ex. "Paris" re-saisi après suppression) doit annuler la marque laissée
+    # par delete_client() - sinon une suppression FUTURE de ce nouveau client
+    # laisserait un état incohérent (déjà marqué avant même la 1ère suppression).
+    supprimes = _lire_supprimes()
+    if client_id in supprimes:
+        supprimes.discard(client_id)
+        with open(CLIENTS_SUPPRIMES, "w", encoding="utf-8") as f:
+            json.dump(sorted(supprimes), f, ensure_ascii=False, indent=2)
     return client
 
 
-def ensure_client(client_id: str, nom: str) -> dict:
+def ensure_client(client_id: str, nom: str) -> dict | None:
     """Comme create_client, mais avec un identifiant fixe imposé plutôt que
     dérivé du nom, et idempotent : ne recrée rien si le client existe déjà.
     Utilisé pour les clients par défaut qui doivent survivre à un redémarrage
-    Streamlit Cloud (disque non persistant, data/clients/ non versionné)."""
+    Streamlit Cloud (disque non persistant, data/clients/ non versionné).
+
+    Ne recrée PAS non plus un client explicitement supprimé (delete_client) :
+    une suppression volontaire doit être définitive, y compris pour un client
+    par défaut - sans ce garde-fou (cf. CLIENTS_SUPPRIMES), il réapparaissait
+    dès le rendu de page suivant. Vérifié seulement si le client n'existe pas
+    déjà : une création explicite (create_client) réutilisant le même
+    identifiant n'est jamais bloquée par un ancien passage ici."""
     _ensure_index()
     clients = list_clients()
     for c in clients:
         if c["id"] == client_id:
             return c
+    if client_id in _lire_supprimes():
+        return None
 
     client = {"id": client_id, "nom": nom}
     clients.append(client)
@@ -104,11 +146,17 @@ def delete_client(client_id: str) -> None:
     """Supprime définitivement un client : sa fiche (index.json) ET tout son
     espace disque (référentiel, historique des conversions, fichiers
     archivés). Irréversible - à protéger d'une confirmation explicite côté
-    interface avant tout appel."""
+    interface avant tout appel.
+
+    Marque aussi client_id comme explicitement supprimé (cf. CLIENTS_SUPPRIMES) :
+    sans ça, un client par défaut (Paris/Valence, cf. core.bootstrap) était
+    recréé instantanément au rendu de page suivant par ensure_defaults(),
+    rendant sa suppression impossible en pratique."""
     clients = [c for c in list_clients() if c["id"] != client_id]
     with open(CLIENTS_INDEX, "w", encoding="utf-8") as f:
         json.dump(clients, f, ensure_ascii=False, indent=2)
     shutil.rmtree(client_dir(client_id), ignore_errors=True)
+    _marquer_supprime(client_id)
 
 
 def set_email_config(client_id: str, tenant_id: str, mailbox: str) -> None:
