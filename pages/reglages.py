@@ -11,7 +11,16 @@ import json
 import streamlit as st
 import streamlit.components.v1 as components
 
-from core.app_config import get_footer_sidebar, get_url_app, set_footer_sidebar, set_url_app
+from core.app_config import (
+    get_footer_sidebar,
+    get_url_app,
+    has_auth_password,
+    is_auth_active,
+    set_auth_active,
+    set_auth_password,
+    set_footer_sidebar,
+    set_url_app,
+)
 from core.client_store import (
     DEFAULT_PREFIXE_MAIL,
     get_client,
@@ -36,8 +45,8 @@ if client_id is None:
 mappings = load_mappings(client_id)
 client = get_client(client_id)
 
-tab_generaux, tab_email, tab_sauvegarde, tab_infos = st.tabs(
-    ["Paramètres généraux", "Gestion Email", "Sauvegarde", "Informations"]
+tab_generaux, tab_email, tab_sauvegarde, tab_authentification, tab_infos = st.tabs(
+    ["Paramètres généraux", "Gestion Email", "Sauvegarde", "Authentification", "Informations"]
 )
 
 with tab_generaux:
@@ -302,6 +311,53 @@ with tab_sauvegarde:
                         st.session_state["_restauration_reussie"] = True
                         st.session_state["_version_uploader_restauration"] = _version_uploader + 1
                         st.rerun()
+
+with tab_authentification:
+    st.subheader("🔒 Authentification")
+    st.caption(
+        "Protège l'accès à **toute l'application** par un code unique, demandé au chargement — "
+        "réglage global, partagé par toute l'équipe (pas de compte individuel), indépendant du "
+        "client sélectionné ici. ⚠️ Aucune récupération possible si le code est perdu : il faudra "
+        "le réinitialiser directement dans `data/app_config.json` sur le serveur."
+    )
+
+    mot_de_passe_deja_defini = has_auth_password()
+    nouveau_mdp = st.text_input(
+        "Code d'accès",
+        type="password",
+        placeholder="Définir un nouveau code" if not mot_de_passe_deja_defini else "Laisser vide pour ne pas le changer",
+    )
+    if st.button("💾 Enregistrer le code d'accès"):
+        if not nouveau_mdp.strip():
+            st.error("Le code ne peut pas être vide.")
+        else:
+            set_auth_password(nouveau_mdp.strip())
+            st.session_state["_auth_mdp_enregistre"] = True
+            st.rerun()
+    if st.session_state.pop("_auth_mdp_enregistre", None):
+        st.success("✅ Code d'accès enregistré.")
+
+    st.divider()
+    auth_active = is_auth_active()
+    mot_de_passe_deja_defini = has_auth_password()  # relu : peut avoir changé juste au-dessus
+    if auth_active:
+        st.success("✅ Authentification activée : un code est demandé au chargement de l'application.")
+        if st.button("🔓 Désactiver l'authentification"):
+            set_auth_active(False)
+            st.session_state["_auth_desactivee"] = True
+            st.rerun()
+    else:
+        st.info("Authentification désactivée : l'application est accessible sans code.")
+        if not mot_de_passe_deja_defini:
+            st.warning("Définissez d'abord un code d'accès ci-dessus avant de pouvoir l'activer.")
+        if st.button("🔒 Activer l'authentification", type="primary", disabled=not mot_de_passe_deja_defini):
+            set_auth_active(True)
+            st.session_state["_auth_activee"] = True
+            st.rerun()
+    if st.session_state.pop("_auth_activee", None):
+        st.success("✅ Authentification activée.")
+    if st.session_state.pop("_auth_desactivee", None):
+        st.success("✅ Authentification désactivée.")
 
 with tab_infos:
     st.subheader("🔄 Mise à jour de l'application")

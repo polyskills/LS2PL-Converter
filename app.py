@@ -12,9 +12,28 @@ from __future__ import annotations
 import streamlit as st
 import streamlit.components.v1 as components
 
+from core.app_config import is_auth_active, verifier_mot_de_passe
 from core.ui_common import render_client_selector, render_footer_sidebar
 
 st.set_page_config(page_title="LightSpeed → Pennylane", page_icon="🧾", layout="wide")
+
+# Authentification basique (page Réglages > Authentification) : un code d'accès unique, partagé
+# par toute l'équipe, demandé UNE FOIS par session de navigateur (st.session_state - reperdu à
+# chaque rechargement complet de page, pas de cookie persistant). Bloque tout, y compris la
+# sélection de client et la navigation elle-même : doit s'exécuter avant tout le reste, avec
+# st.stop() pour empêcher le rendu du contenu protégé tant que le code n'est pas validé.
+if is_auth_active() and not st.session_state.get("_authentifie"):
+    st.title("🔒 Accès protégé")
+    st.caption("Cette application est protégée par un code d'accès. Contactez votre administrateur si besoin.")
+    with st.form("form_authentification"):
+        code_saisi = st.text_input("Code d'accès", type="password")
+        if st.form_submit_button("Valider", type="primary"):
+            if verifier_mot_de_passe(code_saisi):
+                st.session_state["_authentifie"] = True
+                st.rerun()
+            else:
+                st.error("❌ Code incorrect.")
+    st.stop()
 
 st.logo("assets/logo.png", size="large")
 
