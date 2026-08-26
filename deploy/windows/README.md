@@ -116,6 +116,14 @@ réinstalle les dépendances si besoin, puis redémarre le service. Vérifiez
 ensuite que le **hash de version** affiché dans le menu latéral de
 l'application correspond bien au dernier commit sur GitHub.
 
+**Alternative sans accès terminal/admin** : page **Réglages → Informations →
+Mise à jour de l'application**, un bouton fait la même chose (git pull +
+dépendances si besoin) directement depuis le navigateur, puis redémarre
+l'app et le service de fetch mail — pratique pour appliquer un correctif
+urgent sans passer par quelqu'un ayant un accès serveur. Repose sur le
+réglage `AppExit Default Restart` déjà posé par `install-service.ps1` :
+l'app s'arrête simplement, NSSM la relance seule.
+
 ## Désinstaller le service
 
 ```powershell

@@ -13,6 +13,7 @@ import streamlit as st
 from core.app_config import get_footer_sidebar, get_url_app, set_footer_sidebar, set_url_app
 from core.client_store import get_client, rename_client, set_azure_credentials, set_email_config
 from core.mapping_store import build_export_global_xlsx, load_mappings, save_mappings
+from core.self_update import appliquer_mise_a_jour, redemarrer_apres_delai, verifier_mise_a_jour
 from core.timezone import now_local
 from core.ui_common import render_infos_techniques, select_client
 
@@ -282,6 +283,58 @@ with tab_infos:
         "Anciennement dans le menu latéral de chaque page ; rassemblé ici pour désencombrer la navigation."
     )
     render_infos_techniques(client_id)
+
+    st.divider()
+    st.subheader("🔄 Mise à jour de l'application")
+    st.caption(
+        "Récupère et installe la dernière version publiée sur la branche suivie, sans passer par un "
+        "accès terminal/admin — utile pour appliquer un correctif urgent sans attendre. Redémarre "
+        "l'application **et** le service de fetch mail. Uniquement disponible sur un déploiement "
+        "serveur (Windows/macOS, voir `deploy/`) : sur Streamlit Community Cloud, chaque envoi de "
+        "code redéploie déjà automatiquement, ce bouton n'a pas d'effet utile."
+    )
+    if st.button("🔍 Vérifier les mises à jour"):
+        st.session_state["_maj_verification"] = verifier_mise_a_jour()
+        st.session_state.pop("_maj_confirmation", None)
+
+    verif = st.session_state.get("_maj_verification")
+    if verif:
+        if verif["erreur"]:
+            st.error(f"❌ Vérification impossible : {verif['erreur']}")
+        elif verif["a_jour"]:
+            st.success(f"✅ Application à jour (commit `{verif['commit_local']}`, branche `{verif['branche']}`).")
+        else:
+            st.info(
+                f"⬆️ Nouvelle version disponible sur `{verif['branche']}` : `{verif['commit_local']}` → "
+                f"`{verif['commit_distant']}`\n\n> {verif['message_distant']}"
+            )
+            if st.button("⚠️ Installer la mise à jour et redémarrer"):
+                st.session_state["_maj_confirmation"] = True
+
+    if st.session_state.get("_maj_confirmation"):
+        st.warning(
+            "⚠️ L'application et le service de fetch mail vont redémarrer dans quelques secondes — "
+            "coupure de quelques secondes pour tous les utilisateurs, et toute saisie en cours non "
+            "enregistrée (ex. modifications d'un tableau sans avoir cliqué « Enregistrer ») sera "
+            "perdue. Confirmer ?"
+        )
+        cm1, cm2, _ = st.columns([1, 1, 4])
+        if cm1.button("✅ Oui, mettre à jour maintenant", type="primary"):
+            resultat_maj = appliquer_mise_a_jour()
+            if resultat_maj["succes"]:
+                st.session_state.pop("_maj_confirmation", None)
+                st.session_state.pop("_maj_verification", None)
+                st.success(
+                    f"✅ Mise à jour appliquée (commit `{resultat_maj['nouveau_commit']}`)"
+                    + (" — dépendances réinstallées." if resultat_maj["dependances_reinstallees"] else ".")
+                    + " Redémarrage en cours : rechargez la page dans quelques secondes."
+                )
+                redemarrer_apres_delai()
+            else:
+                st.error(f"❌ Échec de la mise à jour : {resultat_maj['erreur']}")
+        if cm2.button("Annuler la mise à jour"):
+            st.session_state.pop("_maj_confirmation", None)
+            st.rerun()
 
     st.divider()
     st.subheader("🖋️ Pied de page du menu latéral")
