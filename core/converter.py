@@ -12,6 +12,7 @@ from core.mapping_store import (
     est_mode_paiement_ignore,
     find_code_analytique,
     find_compte_paiement,
+    find_compte_pourboire,
     find_compte_reference,
     find_compte_tva,
     find_departement,
@@ -243,6 +244,40 @@ def convert(
             }
         )
         ligne_id += 1
+
+        if p.pourboire:
+            # Le montant encaissé ci-dessus reste brut (pourboire compris) : la contrepartie
+            # est cette ligne de crédit dédiée, sur un compte propre au mode de paiement
+            # (ex. espèces ≠ carte bancaire) - jamais de TVA sur un pourboire volontaire.
+            compte_pourboire = find_compte_pourboire(mappings, p.libelle)
+            if compte_pourboire is None:
+                res.erreurs.append(
+                    f"Pourboire de {p.pourboire:.2f} € sur le mode de paiement « {p.libelle} » : "
+                    "aucun compte paramétré dans « Comptes de pourboires » → écriture déséquilibrée."
+                )
+            else:
+                res.lignes.append(
+                    {
+                        "Date": date_piece,
+                        "Code Journal": code_journal,
+                        "Numéro de compte": compte_pourboire["compte"],
+                        "Libellé de compte": compte_pourboire.get("libelle_compte", ""),
+                        "Libellé de ligne": f"Pourboire {p.libelle}",
+                        "Taux de TVA du compte": "",
+                        "Code pays du compte": _code_pays_compte(compte_pourboire["compte"], code_pays),
+                        "Libellé de pièce": libelle_piece,
+                        "Numéro de pièce": numero_piece,
+                        "Débit et/ou Crédit": 0,
+                        "Crédit": round(p.pourboire, 2),
+                        "Famille de catégories": "",
+                        "Catégorie": "",
+                        "Identifiant de ligne": ligne_id,
+                        "Poids analytique": "",
+                        "Identifiant de lettrage": "",
+                        "Échéance": "",
+                    }
+                )
+                ligne_id += 1
 
     total_debit = sum(l["Débit et/ou Crédit"] for l in res.lignes)
     total_credit = sum(l["Crédit"] for l in res.lignes)

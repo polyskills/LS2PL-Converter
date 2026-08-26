@@ -240,6 +240,7 @@ with tab_sauvegarde:
                         "Codes analytiques": len(mappings_a_restaurer.get("codes_analytiques", [])),
                         "Attribution analytique": len(mappings_a_restaurer.get("comptes_analytiques", [])),
                         "Moyens de paiement": len(mappings_a_restaurer.get("comptes_paiement", [])),
+                        "Comptes de pourboires": len(mappings_a_restaurer.get("comptes_pourboires", [])),
                         "Moyens de paiement ignorés": len(mappings_a_restaurer.get("modes_paiement_ignores", [])),
                         "Taux de TVA": len(mappings_a_restaurer.get("comptes_tva", [])),
                         "Paramètres généraux": "inclus (code journal, compte d'écart...)",

@@ -277,21 +277,30 @@ _SAMPLE_CSV_AVEC_POURBOIRES = (
 ).encode("utf-8")
 
 
-def test_parse_exclut_les_pourboires_des_montants_de_paiement():
+def test_parse_conserve_le_brut_et_expose_le_pourboire_par_ligne():
     export = parse_lightspeed_export(_SAMPLE_CSV_AVEC_POURBOIRES, "export.csv")
-    # 60€ bruts sur la carte, dont 10€ de pourboire -> 50€ nets retenus, pas 60€.
+    # 60€ bruts sur la carte, dont 10€ de pourboire -> le montant de la ligne reste 60€
+    # (brut, conservé dans l'écriture), le pourboire est exposé à part pour sa propre
+    # ligne de crédit (cf. core.converter) - jamais silencieusement absorbé.
     montants = {p.libelle: p.montant for p in export.paiements}
-    assert montants == {"ESPECES": 50.0, "VISA MASTERCARD": 50.0}
+    pourboires = {p.libelle: p.pourboire for p in export.paiements}
+    assert montants == {"ESPECES": 50.0, "VISA MASTERCARD": 60.0}
+    assert pourboires == {"ESPECES": 0.0, "VISA MASTERCARD": 10.0}
+    # Les totaux agrégés, eux, restent nets des pourboires (cohérents avec le CA TTC des
+    # ventes déclaré par LightSpeed, qui n'a jamais inclus les pourboires) - sert au
+    # contrôle de cohérence ventes/encaissements affiché à l'écran, indépendant de
+    # l'écriture générée par convert().
     assert export.total_paiements == 100.0
     assert export.total_eur_final == 83.33 + 16.67  # == 100.0, cohérent avec les ventes TTC
     assert export.ca_ttc == 100.0
     assert export.ventes_encaissements_coherents
 
 
-def test_convert_avec_pourboires_ne_gonfle_pas_l_ecart():
-    """Avant correction : le pourboire de 10€ inclus dans le montant carte
-    gonflait artificiellement l'écart de régularisation de 10€. Ici, sans
-    aucun report déclaré, l'écriture doit s'équilibrer exactement sans écart."""
+def test_convert_pourboire_credite_le_compte_dedie_sans_tva():
+    """Le montant brut encaissé (pourboire compris) reste au débit du compte de
+    contrepartie ; le pourboire génère en parallèle une ligne de crédit dédiée sur le
+    compte de pourboires du mode de paiement concerné, sans aucune TVA - l'écriture doit
+    s'équilibrer exactement, brut au débit contre (ventes + TVA + pourboire) au crédit."""
     export = parse_lightspeed_export(_SAMPLE_CSV_AVEC_POURBOIRES, "export.csv")
     mappings = {
         **DEFAULT_MAPPINGS,
@@ -304,10 +313,46 @@ def test_convert_avec_pourboires_ne_gonfle_pas_l_ecart():
             {"mode_paiement": "ESPECES", "compte": "530000", "libelle_compte": "Caisse"},
             {"mode_paiement": "VISA MASTERCARD", "compte": "511100", "libelle_compte": "Remises CB"},
         ],
+        "comptes_pourboires": [
+            {"mode_paiement": "VISA MASTERCARD", "compte": "462200", "libelle_compte": "Pourboires à reverser - CB"},
+        ],
     }
     res = convert(export, mappings, point_de_vente="REST", date_piece="11/08/26", numero_piece="LS-TEST")
     assert res.sans_erreur, res.erreurs
     assert res.equilibre_ok
     assert res.ecart_calcule == 0.0
     assert not res.avertissements
-    assert res.total_debit == res.total_credit == 100.0
+    assert res.total_debit == res.total_credit == 110.0  # brut : 50 espèces + 60 carte
+
+    ligne_carte = next(l for l in res.lignes if l["Libellé de ligne"] == "VISA MASTERCARD")
+    assert ligne_carte["Débit et/ou Crédit"] == 60.0  # brut, pourboire compris
+
+    ligne_pourboire = next(l for l in res.lignes if l["Libellé de ligne"] == "Pourboire VISA MASTERCARD")
+    assert ligne_pourboire["Numéro de compte"] == "462200"
+    assert ligne_pourboire["Crédit"] == 10.0
+    assert ligne_pourboire["Taux de TVA du compte"] == ""  # jamais de TVA sur un pourboire
+    assert ligne_pourboire["Catégorie"] == ""
+
+    # ESPECES n'a pas de pourboire sur cet export : aucune ligne "Pourboire ESPECES" générée.
+    assert not any(l["Libellé de ligne"] == "Pourboire ESPECES" for l in res.lignes)
+
+
+def test_convert_pourboire_sans_compte_mappe_bloque_l_export():
+    export = parse_lightspeed_export(_SAMPLE_CSV_AVEC_POURBOIRES, "export.csv")
+    mappings = {
+        **DEFAULT_MAPPINGS,
+        "comptes_de_vente": [{"compte": "70110200", "libelle_compte": "VENTE LIQUIDE TVA 20%"}],
+        "departements": [{"categorie_lightspeed": "Plat", "compte": "70110200", "taux_tva": "20%"}],
+        "comptes_analytiques": [
+            {"compte": "70110200", "point_de_vente": "REST", "categorie_lightspeed": "Plat", "code_analytique": "REST"}
+        ],
+        "comptes_paiement": [
+            {"mode_paiement": "ESPECES", "compte": "530000", "libelle_compte": "Caisse"},
+            {"mode_paiement": "VISA MASTERCARD", "compte": "511100", "libelle_compte": "Remises CB"},
+        ],
+        "comptes_pourboires": [],  # aucun compte de pourboire paramétré
+    }
+    res = convert(export, mappings, point_de_vente="REST", date_piece="11/08/26", numero_piece="LS-TEST")
+    assert not res.sans_erreur
+    assert any("Pourboire" in e and "VISA MASTERCARD" in e for e in res.erreurs)
+    assert not any(l["Libellé de ligne"] == "Pourboire VISA MASTERCARD" for l in res.lignes)

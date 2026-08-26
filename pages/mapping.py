@@ -128,6 +128,7 @@ mappings = load_mappings(client_id)
     tab_codes_analytiques,
     tab_departements,
     tab_paiement,
+    tab_pourboires,
     tab_paiement_ignores,
     tab_tva,
     tab_attribution,
@@ -138,6 +139,7 @@ mappings = load_mappings(client_id)
         "Codes Analytique PL",
         "Départements LS",
         "Moyens de paiements",
+        "Comptes de pourboires",
         "Moyens de paiements ignorés",
         "Taux de TVA",
         "Attribution analytique",
@@ -334,6 +336,37 @@ with tab_paiement:
     )
     edited_paiement = edited_paiement_df.dropna(how="all").fillna("").to_dict("records")
     _bouton_export_csv(edited_paiement_df, client_id, "moyens_paiement", "Moyens de paiements", key="export_paiement")
+
+with tab_pourboires:
+    st.markdown(
+        "Compte de vente crédité du **pourboire** de chaque mode de paiement — le montant "
+        "encaissé (ci-dessus, onglet « Moyens de paiements ») reste **brut**, pourboire compris ; "
+        "cette table donne juste sa contrepartie, généralement **différente selon le mode de "
+        "paiement** (ex. un compte pour les espèces, un autre pour la carte bancaire). Jamais de "
+        "TVA générée sur ce montant (pourboire volontaire). Un mode de paiement avec un pourboire "
+        "non nul sur l'export mais absent d'ici bloque l'export, comme un mode de paiement non "
+        "mappé dans « Moyens de paiements »."
+    )
+    edited_pourboires_df = st.data_editor(
+        _as_editable_df(
+            mappings.get("comptes_pourboires", []),
+            ["mode_paiement", "compte", "libelle_compte", "commentaires"],
+            tri="mode_paiement",
+        ),
+        num_rows="dynamic",
+        use_container_width=True,
+        key="editor_pourboires",
+        column_config={
+            "mode_paiement": st.column_config.TextColumn("Mode de paiement LightSpeed", required=True),
+            "compte": st.column_config.TextColumn("Compte crédité du pourboire", required=True),
+            "libelle_compte": st.column_config.TextColumn("Libellé du compte"),
+            "commentaires": st.column_config.TextColumn("Commentaires"),
+        },
+    )
+    edited_pourboires = edited_pourboires_df.dropna(how="all").fillna("").to_dict("records")
+    _bouton_export_csv(
+        edited_pourboires_df, client_id, "comptes_pourboires", "Comptes de pourboires", key="export_pourboires"
+    )
 
 with tab_paiement_ignores:
     st.markdown(
@@ -613,6 +646,7 @@ if b1.button("💾 Enregistrer", type="primary"):
             # immédiatement) par le formulaire de l'onglet "Attribution analytique", pas par ce
             # bouton - **mappings ci-dessus porte déjà sa valeur à jour.
             "comptes_paiement": edited_paiement,
+            "comptes_pourboires": edited_pourboires,
             "modes_paiement_ignores": edited_paiement_ignores,
             "comptes_tva": edited_tva,
         },

@@ -30,6 +30,14 @@ Tables :
                          cette combinaison figée, une résolution dynamique
                          sera nécessaire à la place.
 - comptes_paiement     : Mode de paiement LightSpeed -> Compte de contrepartie (banque/caisse)
+- comptes_pourboires   : Mode de paiement LightSpeed -> Compte de vente crédité du pourboire
+                         de ce mode (ex. un compte pour les espèces, un autre pour la carte
+                         bancaire). Le montant brut encaissé (pourboire compris) reste au débit
+                         du compte de contrepartie ci-dessus ; le pourboire lui-même n'est donc
+                         jamais "perdu", il est simplement reclassé ici en contrepartie - jamais
+                         de TVA sur ce montant (pourboire volontaire). Un mode de paiement avec
+                         un pourboire non nul mais absent d'ici bloque l'export, comme un mode de
+                         paiement non mappé dans comptes_paiement.
 - modes_paiement_ignores : intitulés de mode de paiement (correspondance
                          EXACTE, insensible à la casse/espaces) à exclure
                          purement et simplement du bloc "Modes de paiement" -
@@ -72,6 +80,7 @@ EMPTY_MAPPINGS = {
     "codes_analytiques": [],
     "comptes_analytiques": [],
     "comptes_paiement": [],
+    "comptes_pourboires": [],
     "modes_paiement_ignores": [],
     "comptes_tva": [],
 }
@@ -124,6 +133,10 @@ DEFAULT_MAPPINGS = {
         {"mode_paiement": "UberEats", "compte": "411110", "libelle_compte": "Créances plateformes de livraison - UberEats"},
         {"mode_paiement": "Lightspeed Payments", "compte": "511400", "libelle_compte": "Lightspeed Payments à encaisser"},
         {"mode_paiement": "Tap to Pay sur iPhone", "compte": "511100", "libelle_compte": "Remises de cartes bancaires"},
+    ],
+    "comptes_pourboires": [
+        {"mode_paiement": "Espèces", "compte": "462100", "libelle_compte": "Pourboires à reverser - espèces"},
+        {"mode_paiement": "Carte bleue", "compte": "462200", "libelle_compte": "Pourboires à reverser - carte bancaire"},
     ],
     "comptes_tva": [
         {"taux": "5.5%", "compte": "445710", "libelle_compte": "TVA collectée 5.5%"},
@@ -253,6 +266,16 @@ def find_compte_paiement(mappings: dict, mode_paiement: str) -> dict | None:
     return None
 
 
+def find_compte_pourboire(mappings: dict, mode_paiement: str) -> dict | None:
+    """Compte de vente crédité du pourboire d'un mode de paiement donné
+    (cf. table « comptes_pourboires » en tête de module)."""
+    target = _norm_key(mode_paiement)
+    for row in mappings.get("comptes_pourboires", []):
+        if _norm_key(row.get("mode_paiement", "")) == target:
+            return row
+    return None
+
+
 def est_mode_paiement_ignore(mappings: dict, mode_paiement: str) -> bool:
     """True si ce mode de paiement doit être totalement exclu du bloc
     Règlements (ni débit ni crédit généré) - correspondance exacte
@@ -328,6 +351,7 @@ _TABLES_EXPORT_GLOBAL = [
     ("Comptes de vente PL", "comptes_de_vente", ["compte", "libelle_compte", "commentaires"]),
     ("Codes Analytique PL", "codes_analytiques", ["code_analytique", "description", "commentaires"]),
     ("Moyens de paiements", "comptes_paiement", ["mode_paiement", "compte", "libelle_compte", "commentaires"]),
+    ("Comptes de pourboires", "comptes_pourboires", ["mode_paiement", "compte", "libelle_compte", "commentaires"]),
     ("Moyens paiement ignorés", "modes_paiement_ignores", ["mode_paiement", "commentaires"]),
     ("Taux de TVA", "comptes_tva", ["taux", "compte", "libelle_compte", "commentaires"]),
 ]

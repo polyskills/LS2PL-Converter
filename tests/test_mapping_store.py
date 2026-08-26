@@ -35,6 +35,7 @@ def test_build_export_global_xlsx_un_onglet_par_table():
         "Codes Analytique PL",
         "Départements LS",
         "Moyens de paiements",
+        "Comptes de pourboires",
         "Moyens paiement ignorés",
         "Taux de TVA",
         "Attribution analytique",

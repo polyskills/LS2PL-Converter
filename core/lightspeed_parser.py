@@ -31,12 +31,18 @@ Bloc 2 - Encaissements :
     les totaux agrégés (Total des paiements, Total des reports, Total EUR...)
     dans la dernière colonne ("Montant (Moins les pourboires)", nette des
     pourboires) plutôt que "Montant (Moins retour)" (colonne 1, brute).
-    Les pourboires n'étant pas utiles à l'analytique et devant être exclus
-    des montants comptabilisés, le parseur détecte cette colonne par
-    intitulé et l'utilise pour TOUT le bloc (lignes individuelles ET totaux)
-    quand elle existe — ignorant de fait la colonne "Pourboire" elle-même et
-    la colonne brute. Sans cette colonne (export sans pourboire), on retombe
-    sur la colonne 1 comme avant.
+
+    Les pourboires SONT comptabilisés (cf. core.converter) : le montant brut
+    encaissé ("Montant (Moins retour)", pourboire compris) reste au débit du
+    compte de contrepartie de chaque mode de paiement, et le pourboire de
+    chaque ligne (colonne "Pourboire") génère en parallèle une ligne de
+    crédit dédiée sur un compte de pourboires propre à ce mode de paiement.
+    Les totaux agrégés du bloc, eux, continuent à être lus dans la colonne
+    nette des pourboires quand elle existe (cohérent avec le CA TTC des
+    ventes, qui n'a jamais inclus les pourboires — sert au contrôle de
+    cohérence ventes/encaissements affiché à l'écran, indépendant de
+    l'écriture générée). Sans colonne "Pourboire" (export sans pourboire),
+    on retombe sur la colonne brute comme avant, pour tout.
 
 Formats supportés : .xls (ancien binaire Excel), .xlsx, .csv (séparateur ;
 ou ,, détecté automatiquement).
@@ -69,7 +75,8 @@ class CategorieVente:
 @dataclass
 class ModePaiement:
     libelle: str
-    montant: float
+    montant: float  # brut, pourboire compris - cf. note en tête de module
+    pourboire: float = 0.0  # 0.0 si l'export ne comporte pas de colonne "Pourboire"
 
 
 @dataclass
@@ -253,14 +260,16 @@ def _locate_ventes_columns(header_row: list[str], filename: str) -> dict:
 
 _LABEL_MONTANT_NET_POURBOIRES = "Montant (Moins les pourboires)"
 _LABEL_MONTANT_BRUT = "Montant (Moins retour)"
+_LABEL_POURBOIRE = "Pourboire"
 
 
 def _locate_montant_paiement_column(header_row: list[str]) -> int:
-    """Colonne à utiliser pour TOUS les montants du bloc « Modes de paiement »
-    (lignes individuelles et totaux agrégés) : la colonne nette des pourboires
-    si elle existe (export avec pourboires), sinon la colonne brute usuelle -
-    jamais une position figée, pour ne pas casser silencieusement si
-    LightSpeed réordonne encore ses colonnes."""
+    """Colonne à utiliser pour les TOTAUX agrégés du bloc « Modes de paiement »
+    (Total des paiements, Total EUR...) : la colonne nette des pourboires si
+    elle existe (cohérent avec le CA TTC des ventes, qui n'inclut jamais les
+    pourboires), sinon la colonne brute usuelle - jamais une position figée,
+    pour ne pas casser silencieusement si LightSpeed réordonne encore ses
+    colonnes."""
     for i, v in enumerate(header_row):
         if v == _LABEL_MONTANT_NET_POURBOIRES:
             return i
@@ -268,6 +277,27 @@ def _locate_montant_paiement_column(header_row: list[str]) -> int:
         if v == _LABEL_MONTANT_BRUT:
             return i
     return 1  # dernier recours : position historique, fichiers très simples sans en-tête détaillé
+
+
+def _locate_montant_brut_et_pourboire(header_row: list[str], idx_montant_totaux: int) -> tuple[int, int | None]:
+    """Colonnes à utiliser pour CHAQUE LIGNE de mode de paiement (à la
+    différence des totaux ci-dessus) : le montant brut réellement encaissé
+    ("Montant (Moins retour)", pourboire compris - c'est ce montant qui doit
+    rester au débit du compte de contrepartie, cf. core.converter), et la
+    colonne "Pourboire" elle-même si présente (sert à générer la ligne de
+    crédit dédiée). Sans colonne brute distincte (export sans pourboire), il
+    n'y a qu'une seule colonne de montant : celle des totaux fait aussi
+    office de colonne brute."""
+    idx_brut = None
+    idx_pourboire = None
+    for i, v in enumerate(header_row):
+        if v == _LABEL_MONTANT_BRUT:
+            idx_brut = i
+        elif v == _LABEL_POURBOIRE:
+            idx_pourboire = i
+    if idx_brut is None:
+        idx_brut = idx_montant_totaux
+    return idx_brut, idx_pourboire
 
 
 def parse_lightspeed_export(file_bytes: bytes, filename: str) -> LightspeedExport:
@@ -363,6 +393,7 @@ def parse_lightspeed_export(file_bytes: bytes, filename: str) -> LightspeedExpor
         p_idx = paiement_hdr[0]
         paiement_header_row = [_norm(v) for v in df.iloc[p_idx].tolist()]
         idx_montant = _locate_montant_paiement_column(paiement_header_row)
+        idx_brut, idx_pourboire = _locate_montant_brut_et_pourboire(paiement_header_row, idx_montant)
         state = "PAIEMENTS"
         j = p_idx + 1
         while j < len(df):
@@ -380,7 +411,9 @@ def parse_lightspeed_export(file_bytes: bytes, filename: str) -> LightspeedExpor
                     total_eur_final = val
                     state = "APRES_TOTAL_EUR"
                 elif lbl:
-                    paiements.append(ModePaiement(libelle=lbl, montant=val))
+                    montant_brut = round(_num(df.iat[j, idx_brut]), 2)
+                    pourboire = round(_num(df.iat[j, idx_pourboire]), 2) if idx_pourboire is not None else 0.0
+                    paiements.append(ModePaiement(libelle=lbl, montant=montant_brut, pourboire=pourboire))
 
             elif state == "APRES_PAIEMENTS":
                 if lbl == "Total des reports":
