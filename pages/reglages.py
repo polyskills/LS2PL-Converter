@@ -312,7 +312,6 @@ with tab_infos:
     )
     if st.button("🔍 Vérifier les mises à jour"):
         st.session_state["_maj_verification"] = verifier_mise_a_jour()
-        st.session_state.pop("_maj_confirmation", None)
 
     verif = st.session_state.get("_maj_verification")
     if verif:
@@ -325,35 +324,26 @@ with tab_infos:
                 f"⬆️ Nouvelle version disponible sur `{verif['branche']}` : `{verif['commit_local']}` → "
                 f"`{verif['commit_distant']}`\n\n> {verif['message_distant']}"
             )
-            if st.button("⚠️ Installer la mise à jour et redémarrer"):
-                st.session_state["_maj_confirmation"] = True
-
-    if st.session_state.get("_maj_confirmation"):
-        st.warning(
-            "⚠️ L'application et le service de fetch mail vont redémarrer dans quelques secondes — "
-            "coupure de quelques secondes pour tous les utilisateurs, et toute saisie en cours non "
-            "enregistrée (ex. modifications d'un tableau sans avoir cliqué « Enregistrer ») sera "
-            "perdue. Confirmer ?"
-        )
-        cm1, cm2, _ = st.columns([1, 1, 4])
-        if cm1.button("✅ Oui, mettre à jour maintenant", type="primary"):
-            resultat_maj = appliquer_mise_a_jour()
-            if resultat_maj["succes"]:
-                st.session_state.pop("_maj_confirmation", None)
-                st.session_state.pop("_maj_verification", None)
-                # Sans rerun ici, les deux boutons de confirmation (déjà dessinés plus haut dans
-                # ce même passage de script) resteraient affichés sous le message de succès -
-                # trompeur, on dirait la mise à jour non prise en compte. redemarrer_apres_delai()
-                # est appelé AVANT le rerun : il programme juste un minuteur en tâche de fond, le
-                # rerun qui suit ne l'annule pas.
-                st.session_state["_maj_resultat"] = resultat_maj
-                redemarrer_apres_delai()
-                st.rerun()
-            else:
-                st.error(f"❌ Échec de la mise à jour : {resultat_maj['erreur']}")
-        if cm2.button("Annuler la mise à jour"):
-            st.session_state.pop("_maj_confirmation", None)
-            st.rerun()
+            st.caption(
+                "⚠️ L'application et le service de fetch mail vont redémarrer dans quelques "
+                "secondes — coupure de quelques secondes pour tous les utilisateurs, et toute "
+                "saisie en cours non enregistrée (ex. modifications d'un tableau sans avoir "
+                "cliqué « Enregistrer ») sera perdue."
+            )
+            if st.button("⚠️ Installer la mise à jour et redémarrer", type="primary"):
+                resultat_maj = appliquer_mise_a_jour()
+                if resultat_maj["succes"]:
+                    st.session_state.pop("_maj_verification", None)
+                    # Sans rerun ici, le bouton (déjà dessiné plus haut dans ce même passage de
+                    # script) resterait affiché sous le message de succès - trompeur, on dirait la
+                    # mise à jour non prise en compte. redemarrer_apres_delai() est appelé AVANT
+                    # le rerun : il programme juste un minuteur en tâche de fond, le rerun qui
+                    # suit ne l'annule pas.
+                    st.session_state["_maj_resultat"] = resultat_maj
+                    redemarrer_apres_delai()
+                    st.rerun()
+                else:
+                    st.error(f"❌ Échec de la mise à jour : {resultat_maj['erreur']}")
 
     resultat_maj_affiche = st.session_state.get("_maj_resultat")
     if resultat_maj_affiche:
