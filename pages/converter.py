@@ -19,6 +19,7 @@ import streamlit.components.v1 as components
 
 from core.client_store import get_client
 from core.converter import convert
+from core.email_ingest import date_aaaammjj
 from core.history_store import record_conversion
 from core.lightspeed_parser import LightspeedParseError, parse_lightspeed_export
 from core.mapping_store import load_mappings
@@ -379,7 +380,17 @@ if uploaded_files:
             st.subheader("4. Télécharger le fichier Pennylane")
             tous_ok = all(r.sans_erreur for r in resultats)
             csv_bytes = build_pennylane_csv(resultats)
-            fname = f"import_pennylane_{now_local().strftime('%Y%m%d')}.csv"
+            # Même convention que le CSV du fetch automatique (import_pl_{client}_{pdv}_{date}.csv),
+            # mais plusieurs fichiers peuvent être combinés ici en un seul export : point de vente et
+            # date ne sont donc uniques que si tous les fichiers déposés partagent la même valeur -
+            # sinon "multi", plutôt qu'une valeur arbitrairement choisie parmi plusieurs candidates
+            # tout aussi valables, qui laisserait croire à tort que le fichier ne couvre qu'un point
+            # de vente ou une date.
+            pdvs_distincts = sorted({cfg["point_de_vente"] for cfg in file_configs if cfg["point_de_vente"]})
+            dates_distinctes = sorted({cfg["date_piece"] for cfg in file_configs})
+            pdv_fname = pdvs_distincts[0] if len(pdvs_distincts) == 1 else "multi"
+            date_fname = date_aaaammjj(dates_distinctes[0]) if len(dates_distinctes) == 1 else "multi"
+            fname = f"import_pl_{client_id}_{pdv_fname}_{date_fname}.csv"
 
             st.download_button(
                 "⬇️ Télécharger le fichier d'import Pennylane (.csv)",

@@ -38,7 +38,7 @@ import re
 from core.app_config import get_url_app
 from core.client_store import get_prefixe_mail, list_clients
 from core.converter import convert
-from core.email_ingest import EmailIngestError, identifier_source
+from core.email_ingest import EmailIngestError, date_aaaammjj, identifier_source
 from core.history_store import record_conversion
 from core.lightspeed_parser import LightspeedParseError, parse_lightspeed_export
 from core.mapping_store import find_pdv, load_mappings
@@ -241,15 +241,6 @@ def _pied_de_page_lien_app() -> str:
     )
 
 
-def _date_fichier(date_piece: str) -> str:
-    """Convertit une date de pièce "dd/mm/aa" (format utilisé pour la pièce
-    comptable, cf. numero_piece) en "AAAAMMJJ" pour un nom de fichier — même
-    convention que les exports LightSpeed source. Suppose le XXIe siècle
-    (2000+aa), sans ambiguïté pour un usage courant de l'application."""
-    d, m, y = date_piece.split("/")
-    return f"20{y}{m}{d}"
-
-
 def _envoyer_resultat(
     graph, mailbox, adresses_resultat, source, res, raw: bytes, csv_bytes: bytes, date_piece: str,
     prefixe_mail: str = "LS2PL",
@@ -276,7 +267,7 @@ def _envoyer_resultat(
         to_addresses=adresses_resultat,
         attachments=[
             (res.source_filename, raw),
-            (f"import_pl_{source.client_id}_{source.code_pdv}_{_date_fichier(date_piece)}.csv", csv_bytes),
+            (f"import_pl_{source.client_id}_{source.code_pdv}_{date_aaaammjj(date_piece)}.csv", csv_bytes),
         ],
     )
 

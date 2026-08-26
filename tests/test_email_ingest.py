@@ -6,7 +6,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.email_ingest import extraire_periode
+from core.email_ingest import date_aaaammjj, extraire_periode
 
 
 def test_extraire_periode_convention_business_export_accounting():
@@ -43,3 +43,10 @@ def test_extraire_periode_une_seule_date_renvoie_none():
     date_debut, date_fin = extraire_periode("export_20260826.xls")
     assert date_debut is None
     assert date_fin is None
+
+
+def test_date_aaaammjj_inverse_le_formatage_dd_mm_aa():
+    # Inverse de _formate_date : reconstitue AAAAMMJJ pour un nom de fichier
+    # à partir du format dd/mm/aa utilisé pour la pièce comptable.
+    assert date_aaaammjj("26/08/26") == "20260826"
+    assert date_aaaammjj("01/01/25") == "20250101"

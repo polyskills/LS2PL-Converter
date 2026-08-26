@@ -57,6 +57,17 @@ def _formate_date(brut: str) -> str:
     return f"{d}/{m}/{y[-2:]}"
 
 
+def date_aaaammjj(date_piece: str) -> str:
+    """Convertit une date de pièce "dd/mm/aa" (format utilisé pour la pièce
+    comptable, cf. numero_piece) en "AAAAMMJJ" pour un nom de fichier — même
+    convention que les exports LightSpeed source (l'inverse de _formate_date
+    ci-dessus). Suppose le XXIe siècle (2000+aa), sans ambiguïté pour un usage
+    courant de l'application. Partagé entre core.email_poller (résultat du
+    fetch automatique) et pages.converter (téléchargement manuel)."""
+    d, m, y = date_piece.split("/")
+    return f"20{y}{m}{d}"
+
+
 def extraire_periode(filename: str) -> tuple[str | None, str | None]:
     """Extrait (date_debut, date_fin) du nom de fichier, au format dd/mm/aa.
     Retourne (None, None) si le nom de fichier ne suit pas la convention
