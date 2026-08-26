@@ -175,10 +175,15 @@ def appliquer_mise_a_jour() -> dict:
     return resultat
 
 
-def redemarrer_apres_delai(secondes: float = 2.0) -> None:
+def redemarrer_apres_delai(secondes: float = 5.0) -> None:
     """Programme l'arrêt du process courant après un court délai, pour
-    laisser le temps au message de confirmation de s'afficher côté
-    navigateur avant la coupure. Le redémarrage effectif est délégué au
+    laisser le temps au message de confirmation (ET au script de
+    redirection automatique, cf. pages/reglages.py) de bien être livrés au
+    navigateur avant la coupure — sur un réseau réel (pas juste localhost),
+    la marge de 2s initialement retenue s'est révélée trop courte : le
+    process pouvait sortir avant que le rerun Streamlit n'ait fini d'être
+    transmis par le WebSocket, laissant le script de redirection jamais
+    injecté dans la page. Le redémarrage effectif est délégué au
     superviseur du service (NSSM/LaunchDaemon), pas géré ici : ce process
     se contente de sortir."""
     threading.Timer(secondes, lambda: os._exit(0)).start()

@@ -372,7 +372,7 @@ with tab_infos:
         # qu'un souci de reconnexion côté navigateur), on sonde nous-mêmes la disponibilité du
         # serveur et on redirige automatiquement vers la racine du site.
         #
-        # Deux pièges corrigés après un premier essai qui ne redirigeait jamais, vérifiés en
+        # Pièges corrigés après plusieurs essais qui ne redirigeaient jamais, vérifiés en
         # rejouant un vrai cycle arrêt/redémarrage de serveur local :
         # 1. Navigation bloquée par le sandbox : l'iframe de components.html n'a PAS le flag
         #    "allow-top-navigation" (confirmé via la console du navigateur), donc assigner
@@ -385,6 +385,13 @@ with tab_infos:
         #    pas encore sorti) et rediriger dès le premier succès ne prouve rien - il faut
         #    d'abord OBSERVER une coupure confirmée (requête en échec) avant de considérer qu'un
         #    200 qui suit signale un vrai redémarrage, plutôt qu'une simple estimation de délai.
+        # 3. Endpoint interne pas forcément joignable : /_stcore/health peut ne pas être relayé
+        #    par un éventuel reverse proxy/répartiteur devant le serveur réel (observé : Streamlit
+        #    lui-même échoue déjà à joindre ses propres endpoints _stcore/* en 404 sur certains
+        #    déploiements), même une fois l'app effectivement de nouveau disponible - la sonde
+        #    resterait alors bloquée pour toujours sur "indisponible". On sonde donc directement
+        #    la racine du site (/), forcément relayée puisque c'est par là que passent tous les
+        #    utilisateurs normalement.
         components.html(
             r"""
             <script>
@@ -393,9 +400,9 @@ with tab_infos:
                 (function() {
                     var vuIndisponible = false;
                     function sonder() {
-                        fetch(window.location.origin + "/_stcore/health", {cache: "no-store"})
+                        fetch(window.location.origin + "/", {cache: "no-store"})
                             .then(function(r) {
-                                if (r.ok) {
+                                if (r.status < 500) {
                                     if (vuIndisponible) { window.location.href = window.location.origin; }
                                     else { setTimeout(sonder, 1000); }
                                 } else { vuIndisponible = true; setTimeout(sonder, 1000); }
