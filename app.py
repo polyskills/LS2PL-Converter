@@ -23,6 +23,24 @@ st.set_page_config(page_title="LightSpeed → Pennylane", page_icon="🧾", layo
 # sélection de client et la navigation elle-même : doit s'exécuter avant tout le reste, avec
 # st.stop() pour empêcher le rendu du contenu protégé tant que le code n'est pas validé.
 if is_auth_active() and not st.session_state.get("_authentifie"):
+    # st.navigation()/pg.run() n'est jamais atteint tant que la porte d'authentification bloque
+    # (st.stop() plus bas) : sur un tout premier chargement (aucune page encore servie dans ce
+    # process), Streamlit retombe alors sur sa navigation automatique par nom de fichier brut
+    # (pages/converter.py -> "converter", etc.) plutôt que les titres/icônes personnalisés -
+    # inutile et pas terrible visuellement sur un écran de connexion. Masqué entièrement ici.
+    st.markdown(
+        "<style>section[data-testid='stSidebar'] { display: none; }</style>",
+        unsafe_allow_html=True,
+    )
+
+    # En-tête identifiant l'application (logo + nom) : le menu latéral habituel (avec le même
+    # logo) n'est pas rendu tant que le code n'est pas validé, donc rien d'autre ici n'indique sur
+    # quelle application on arrive.
+    col_logo, col_titre = st.columns([1, 6], vertical_alignment="center")
+    col_logo.image("assets/logo.png", width=90)
+    col_titre.markdown("## LS2PL — LightSpeed → Pennylane")
+    st.divider()
+
     st.title("🔒 Accès protégé")
     st.caption("Cette application est protégée par un code d'accès. Contactez votre administrateur si besoin.")
     with st.form("form_authentification"):
