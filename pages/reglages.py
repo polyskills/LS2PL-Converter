@@ -360,63 +360,33 @@ with tab_infos:
         st.success(
             f"✅ Mise à jour appliquée (commit `{resultat_maj_affiche['nouveau_commit']}`)"
             + (" — dépendances réinstallées." if resultat_maj_affiche["dependances_reinstallees"] else ".")
-            + " Redémarrage en cours — vous allez être redirigé automatiquement dès que "
-            "l'application est de nouveau disponible."
+            + " Redémarrage en cours (quelques secondes)."
         )
-        # Naviguer vers une autre page pendant le redémarrage affiche un écran cassé : les pages
-        # Streamlit changent d'écran SANS recharger le navigateur (même connexion WebSocket
-        # réutilisée), or celle-ci est coupée par le redémarrage du process - contrairement à un
-        # vrai rechargement de page (F5, ou retour sur /), qui rouvre une connexion fraîche et
-        # fonctionne toujours. Plutôt que de compter sur l'utilisateur pour deviner qu'il faut
-        # recharger manuellement (confusion : "le site ne fonctionne plus" alors que ce n'est
-        # qu'un souci de reconnexion côté navigateur), on sonde nous-mêmes la disponibilité du
-        # serveur et on redirige automatiquement vers la racine du site.
+        # Ancienne tentative de redirection AUTOMATIQUE (sonde JS + navigation depuis le document
+        # parent) retirée : reste en échec sur au moins un déploiement réel malgré plusieurs
+        # correctifs successifs (sandbox de l'iframe, endpoint sondé, délai de sortie du process),
+        # sans pouvoir être reproduite ni diagnostiquée plus avant depuis cet environnement de
+        # développement. Remplacée par un simple bouton de rafraîchissement MANUEL vers la racine
+        # du site, à cliquer une fois le redémarrage terminé.
         #
-        # Pièges corrigés après plusieurs essais qui ne redirigeaient jamais, vérifiés en
-        # rejouant un vrai cycle arrêt/redémarrage de serveur local :
-        # 1. Navigation bloquée par le sandbox : l'iframe de components.html n'a PAS le flag
-        #    "allow-top-navigation" (confirmé via la console du navigateur), donc assigner
-        #    directement window.parent.location.href DEPUIS CETTE IFRAME est silencieusement
-        #    ignoré par le navigateur, sans erreur visible à l'écran. Contournement : injecter un
-        #    VRAI <script> (document.createElement, jamais innerHTML - qui n'exécute aucun script)
-        #    dans le document PARENT, hors du sandbox ; une fois exécuté LÀ, changer
-        #    window.location.href est autorisé normalement.
-        # 2. Redirection prématurée : sonder un serveur qui répond encore 200 (l'ancien process,
-        #    pas encore sorti) et rediriger dès le premier succès ne prouve rien - il faut
-        #    d'abord OBSERVER une coupure confirmée (requête en échec) avant de considérer qu'un
-        #    200 qui suit signale un vrai redémarrage, plutôt qu'une simple estimation de délai.
-        # 3. Endpoint interne pas forcément joignable : /_stcore/health peut ne pas être relayé
-        #    par un éventuel reverse proxy/répartiteur devant le serveur réel (observé : Streamlit
-        #    lui-même échoue déjà à joindre ses propres endpoints _stcore/* en 404 sur certains
-        #    déploiements), même une fois l'app effectivement de nouveau disponible - la sonde
-        #    resterait alors bloquée pour toujours sur "indisponible". On sonde donc directement
-        #    la racine du site (/), forcément relayée puisque c'est par là que passent tous les
-        #    utilisateurs normalement.
-        components.html(
-            r"""
-            <script>
-            const s = window.parent.document.createElement('script');
-            s.textContent = `
-                (function() {
-                    var vuIndisponible = false;
-                    function sonder() {
-                        fetch(window.location.origin + "/", {cache: "no-store"})
-                            .then(function(r) {
-                                if (r.status < 500) {
-                                    if (vuIndisponible) { window.location.href = window.location.origin; }
-                                    else { setTimeout(sonder, 1000); }
-                                } else { vuIndisponible = true; setTimeout(sonder, 1000); }
-                            })
-                            .catch(function() { vuIndisponible = true; setTimeout(sonder, 1000); });
-                    }
-                    setTimeout(sonder, 500);
-                })();
-            `;
-            window.parent.document.body.appendChild(s);
-            </script>
-            """,
-            height=0,
-        )
+        # Ni st.link_button (ouvre un nouvel onglet, target="_blank" non configurable) ni un lien
+        # <a> rendu via st.markdown (Streamlit y force aussi target="_blank" ET supprime tout
+        # attribut onclick) ne permettent de rester dans le même onglet - vérifié en conditions
+        # réelles. Un vrai st.button (clic Python, pas un lien HTML) qui déclenche la même astuce
+        # de navigation que la redirection automatique (injecter un VRAI <script>, jamais innerHTML,
+        # dans le document PARENT hors du sandbox de l'iframe) fonctionne, lui, de façon fiable :
+        # vérifié aussi en conditions réelles, aucun nouvel onglet, reste sur le même onglet.
+        if st.button("🔄 Rafraîchir la page"):
+            components.html(
+                r"""
+                <script>
+                const s = window.parent.document.createElement('script');
+                s.textContent = "window.location.href = window.location.origin;";
+                window.parent.document.body.appendChild(s);
+                </script>
+                """,
+                height=0,
+            )
 
     st.divider()
     st.subheader("🔧 Informations techniques")
