@@ -24,6 +24,9 @@ def get_version_info() -> dict:
                 cwd=BASE_DIR,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",  # sans ça, Windows décode avec la page de code par défaut
+                # (souvent CP1252, pas UTF-8) : accents dans le message de commit affichés en
+                # mojibake ("Ãªtre" au lieu de "être") alors que git les restitue bien en UTF-8.
                 timeout=5,
                 check=True,
             )

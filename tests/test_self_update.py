@@ -15,6 +15,28 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import core.self_update as self_update
 
 
+def test_git_force_l_encodage_utf8(monkeypatch):
+    # Régression : sans encoding="utf-8" explicite, Windows décode la sortie de
+    # subprocess avec la page de code par défaut (souvent CP1252, pas UTF-8),
+    # produisant du mojibake sur les messages de commit accentués ("Ãªtre" au
+    # lieu de "être") alors que git restitue bien de l'UTF-8.
+    appels = []
+
+    class FauxProcessus:
+        returncode = 0
+        stdout = "ok"
+        stderr = ""
+
+    def faux_run(cmd, **kwargs):
+        appels.append(kwargs)
+        return FauxProcessus()
+
+    monkeypatch.setattr(self_update.subprocess, "run", faux_run)
+    self_update._git("status")
+
+    assert appels[0].get("encoding") == "utf-8"
+
+
 def test_verifier_mise_a_jour_contre_le_vrai_depot():
     resultat = self_update.verifier_mise_a_jour()
     assert resultat["erreur"] is None

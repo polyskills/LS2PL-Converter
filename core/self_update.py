@@ -55,6 +55,8 @@ def _git(*args: str, timeout: int = 15) -> tuple[bool, str]:
             cwd=BASE_DIR,
             capture_output=True,
             text=True,
+            encoding="utf-8",  # sans ça, Windows décode avec la page de code par défaut (souvent
+            # CP1252, pas UTF-8) : messages de commit accentués affichés en mojibake.
             timeout=timeout,
         )
         if out.returncode != 0:
@@ -155,6 +157,7 @@ def appliquer_mise_a_jour() -> dict:
                 cwd=BASE_DIR,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 timeout=180,
             )
             if pip.returncode != 0:
