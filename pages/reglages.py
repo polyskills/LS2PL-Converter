@@ -377,21 +377,42 @@ with tab_infos:
         # fonctionne toujours. Plutôt que de compter sur l'utilisateur pour deviner qu'il faut
         # recharger manuellement (confusion : "le site ne fonctionne plus" alors que ce n'est
         # qu'un souci de reconnexion côté navigateur), on sonde nous-mêmes la disponibilité du
-        # serveur et on redirige automatiquement vers la racine du site dès qu'il répond de nouveau.
+        # serveur et on redirige automatiquement vers la racine du site.
+        #
+        # Deux pièges corrigés après un premier essai qui ne redirigeait jamais, vérifiés en
+        # rejouant un vrai cycle arrêt/redémarrage de serveur local :
+        # 1. Navigation bloquée par le sandbox : l'iframe de components.html n'a PAS le flag
+        #    "allow-top-navigation" (confirmé via la console du navigateur), donc assigner
+        #    directement window.parent.location.href DEPUIS CETTE IFRAME est silencieusement
+        #    ignoré par le navigateur, sans erreur visible à l'écran. Contournement : injecter un
+        #    VRAI <script> (document.createElement, jamais innerHTML - qui n'exécute aucun script)
+        #    dans le document PARENT, hors du sandbox ; une fois exécuté LÀ, changer
+        #    window.location.href est autorisé normalement.
+        # 2. Redirection prématurée : sonder un serveur qui répond encore 200 (l'ancien process,
+        #    pas encore sorti) et rediriger dès le premier succès ne prouve rien - il faut
+        #    d'abord OBSERVER une coupure confirmée (requête en échec) avant de considérer qu'un
+        #    200 qui suit signale un vrai redémarrage, plutôt qu'une simple estimation de délai.
         components.html(
             r"""
             <script>
-            function attendreEtRedemarrer() {
-                fetch(window.parent.location.origin + "/_stcore/health", {cache: "no-store"})
-                    .then(r => {
-                        if (r.ok) window.parent.location.href = window.parent.location.origin;
-                        else setTimeout(attendreEtRedemarrer, 1500);
-                    })
-                    .catch(() => setTimeout(attendreEtRedemarrer, 1500));
-            }
-            // Laisse le temps au process de sortir avant de commencer à sonder
-            // (redemarrer_apres_delai programme la sortie ~2s après l'appel, pas immédiatement).
-            setTimeout(attendreEtRedemarrer, 3000);
+            const s = window.parent.document.createElement('script');
+            s.textContent = `
+                (function() {
+                    var vuIndisponible = false;
+                    function sonder() {
+                        fetch(window.location.origin + "/_stcore/health", {cache: "no-store"})
+                            .then(function(r) {
+                                if (r.ok) {
+                                    if (vuIndisponible) { window.location.href = window.location.origin; }
+                                    else { setTimeout(sonder, 1000); }
+                                } else { vuIndisponible = true; setTimeout(sonder, 1000); }
+                            })
+                            .catch(function() { vuIndisponible = true; setTimeout(sonder, 1000); });
+                    }
+                    setTimeout(sonder, 500);
+                })();
+            `;
+            window.parent.document.body.appendChild(s);
             </script>
             """,
             height=0,
