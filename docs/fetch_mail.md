@@ -5,8 +5,9 @@ checklist de mise en route ([mise_en_route.md](mise_en_route.md)), du
 pas-à-pas de configuration du tenant M365 du client
 ([configuration_m365_client.md](configuration_m365_client.md)) et des
 commandes d'installation du service
-([deploy/windows/README.md](../deploy/windows/README.md) ou
-[deploy/macos/README.md](../deploy/macos/README.md) selon l'OS d'hébergement).
+([deploy/windows/README.md](../deploy/windows/README.md),
+[deploy/macos/README.md](../deploy/macos/README.md) ou
+[deploy/linux/README.md](../deploy/linux/README.md) selon l'OS d'hébergement).
 
 ## Pourquoi
 
@@ -80,7 +81,7 @@ Pour chaque client ayant un tenant + une boîte mail configurés :
 | `core/graph_client.py` | Client HTTP minimal Microsoft Graph, authentification "application" (msal) |
 | `core/email_ingest.py` | Identification déterministe (adresse → client/pdv, nom de fichier → période) |
 | `core/email_poller.py` | Orchestration d'un cycle, testable sans réseau (faux client Graph) |
-| `email_poller.py` | Point d'entrée : boucle infinie + intervalle, à déployer en service Windows |
+| `email_poller.py` | Point d'entrée : boucle infinie + intervalle, à déployer en service (Windows/macOS/Linux) |
 | `tests/test_email_poller.py` | Cas nominal, adresse inconnue, mapping manquant, client sans fetch configuré |
 
 ## État actuel

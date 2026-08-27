@@ -120,8 +120,10 @@ avec un vrai disque persistant :
   (installation en service Windows via NSSM)
 - macOS : **[deploy/macos/README.md](deploy/macos/README.md)**
   (installation en service via LaunchDaemon)
+- Linux : **[deploy/linux/README.md](deploy/linux/README.md)**
+  (installation en service via systemd)
 
-Les deux installent un vrai service (démarrage automatique au boot,
+Les trois installent un vrai service (démarrage automatique au boot,
 redémarrage sur plantage), avec mise à jour et désinstallation scriptées.
 
 ## Tests

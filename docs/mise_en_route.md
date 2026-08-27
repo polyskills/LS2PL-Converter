@@ -36,9 +36,10 @@ par un import manuel. Voir **[fetch_mail.md](fetch_mail.md)** pour le
 fonctionnement détaillé, **[configuration_m365_client.md](configuration_m365_client.md)**
 pour le pas-à-pas complet côté tenant M365 du client (Tenant ID, boîte
 mail, consentement admin, LightSpeed), et selon l'OS d'hébergement,
-**[deploy/windows/README.md](../deploy/windows/README.md#service-de-fetch-automatique-des-exports-lightspeed-par-mail-optionnel)**
-ou
+**[deploy/windows/README.md](../deploy/windows/README.md#service-de-fetch-automatique-des-exports-lightspeed-par-mail-optionnel)**,
 **[deploy/macos/README.md](../deploy/macos/README.md#service-de-fetch-automatique-des-exports-lightspeed-par-mail-optionnel)**
+ou
+**[deploy/linux/README.md](../deploy/linux/README.md#service-de-fetch-automatique-des-exports-lightspeed-par-mail-optionnel)**
 pour l'installation du service. En résumé :
 
 - [ ] Une adresse mail dédiée par point de vente, créée côté client

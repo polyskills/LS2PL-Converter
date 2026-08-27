@@ -11,9 +11,10 @@ Pour le fonctionnement détaillé du service une fois en place (identification
 par adresse, gestion des échecs...), voir
 **[fetch_mail.md](fetch_mail.md)**. Pour l'installation du service côté
 serveur d'hébergement, voir
-**[deploy/windows/README.md](../deploy/windows/README.md#service-de-fetch-automatique-des-exports-lightspeed-par-mail-optionnel)**
+**[deploy/windows/README.md](../deploy/windows/README.md#service-de-fetch-automatique-des-exports-lightspeed-par-mail-optionnel)**,
+**[deploy/macos/README.md](../deploy/macos/README.md#service-de-fetch-automatique-des-exports-lightspeed-par-mail-optionnel)**
 ou
-**[deploy/macos/README.md](../deploy/macos/README.md#service-de-fetch-automatique-des-exports-lightspeed-par-mail-optionnel)**.
+**[deploy/linux/README.md](../deploy/linux/README.md#service-de-fetch-automatique-des-exports-lightspeed-par-mail-optionnel)**.
 
 ## Vue d'ensemble
 

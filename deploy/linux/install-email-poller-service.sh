@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 #
 # Installe le service de fetch automatique des exports LightSpeed reçus par
-# mail (email_poller.py), équivalent macOS de
-# deploy/windows/install-email-poller-service.ps1 — même dépôt, même .venv.
+# mail (email_poller.py), équivalent Linux de
+# deploy/windows/install-email-poller-service.ps1 /
+# deploy/macos/install-email-poller-service.sh — même dépôt, même .venv.
 #
 # A exécuter avec sudo, depuis la RACINE du dépôt cloné, APRES
 # install-service.sh (réutilise le même environnement virtuel).
@@ -13,15 +14,15 @@
 # d'identifiants par client, cf. docs/configuration_m365_client.md). Si tous
 # les clients ont leurs propres identifiants, ces deux options peuvent être
 # omises. Contrairement à Windows (variables d'environnement "Machine"),
-# macOS n'a pas d'équivalent simple pour un LaunchDaemon : ce repli est donc
-# passé en paramètre du script, qui l'écrit dans le plist du service
-# (fichier lisible par root uniquement, cf. chmod 600 plus bas).
+# systemd n'a pas d'équivalent simple partagé entre unités : ce repli est
+# donc passé en paramètre du script, qui l'écrit dans l'unité du service
+# (fichier ensuite lisible par root uniquement, cf. chmod 600 plus bas).
 #
 # Le tenant M365 et la boîte mail à interroger se configurent, eux, par
 # client dans l'application (page Réglages) — pas via ce script.
 #
 # Exemple :
-#   sudo ./deploy/macos/install-email-poller-service.sh \
+#   sudo ./deploy/linux/install-email-poller-service.sh \
 #       --azure-client-id "<app id>" \
 #       --azure-client-secret "<secret>" \
 #       --alerte-interne "compta@polyskills.fr"
@@ -46,7 +47,11 @@ while [ $# -gt 0 ]; do
 done
 
 if [ "$(id -u)" -ne 0 ]; then
-    echo "Ce script doit être exécuté avec sudo (nécessaire pour installer un LaunchDaemon)." >&2
+    echo "Ce script doit être exécuté avec sudo (nécessaire pour installer une unité systemd)." >&2
+    exit 1
+fi
+if ! command -v systemctl >/dev/null 2>&1; then
+    echo "systemd (systemctl) introuvable. Ce script cible les distributions Linux basées sur systemd." >&2
     exit 1
 fi
 if [ -z "$AZURE_CLIENT_ID" ] || [ -z "$AZURE_CLIENT_SECRET" ]; then
@@ -69,58 +74,40 @@ if [ ! -x "$VENV_PYTHON" ]; then
 fi
 sudo -u "$REAL_USER" "$VENV_PYTHON" -m pip install -r "$REPO_ROOT/requirements.txt" --quiet
 
-LABEL="com.polyskills.$SERVICE_NAME"
-PLIST_PATH="/Library/LaunchDaemons/$LABEL.plist"
+UNIT_PATH="/etc/systemd/system/$SERVICE_NAME.service"
 LOGS_DIR="$REPO_ROOT/logs"
 mkdir -p "$LOGS_DIR"
 chown "$REAL_USER" "$LOGS_DIR"
 
-if launchctl print "system/$LABEL" >/dev/null 2>&1; then
-    echo "Le service '$LABEL' existe déjà : arrêt avant réinstallation..."
-    launchctl bootout "system/$LABEL" 2>/dev/null || true
+if [ -f "$UNIT_PATH" ]; then
+    echo "Le service '$SERVICE_NAME' existe déjà : arrêt avant réinstallation..."
+    systemctl stop "$SERVICE_NAME" 2>/dev/null || true
 fi
 
-cat > "$PLIST_PATH" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>$LABEL</string>
-    <key>UserName</key>
-    <string>$REAL_USER</string>
-    <key>WorkingDirectory</key>
-    <string>$REPO_ROOT</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>$VENV_PYTHON</string>
-        <string>email_poller.py</string>
-    </array>
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>LSPENNYLANE_AZURE_CLIENT_ID</key>
-        <string>$AZURE_CLIENT_ID</string>
-        <key>LSPENNYLANE_AZURE_CLIENT_SECRET</key>
-        <string>$AZURE_CLIENT_SECRET</string>
-        <key>LSPENNYLANE_ALERTE_INTERNE</key>
-        <string>$ALERTE_INTERNE</string>
-        <key>LSPENNYLANE_POLL_INTERVAL_SECONDS</key>
-        <string>$POLL_INTERVAL</string>
-    </dict>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>StandardOutPath</key>
-    <string>$LOGS_DIR/email-poller.out.log</string>
-    <key>StandardErrorPath</key>
-    <string>$LOGS_DIR/email-poller.err.log</string>
-</dict>
-</plist>
-PLIST
+cat > "$UNIT_PATH" <<UNIT
+[Unit]
+Description=LightSpeed - Fetch mail automatique
+After=network.target
 
-chown root:wheel "$PLIST_PATH"
-chmod 600 "$PLIST_PATH"  # contient le secret Azure AD : lecture réservée à root
+[Service]
+Type=simple
+User=$REAL_USER
+WorkingDirectory=$REPO_ROOT
+Environment=LSPENNYLANE_AZURE_CLIENT_ID=$AZURE_CLIENT_ID
+Environment=LSPENNYLANE_AZURE_CLIENT_SECRET=$AZURE_CLIENT_SECRET
+Environment=LSPENNYLANE_ALERTE_INTERNE=$ALERTE_INTERNE
+Environment=LSPENNYLANE_POLL_INTERVAL_SECONDS=$POLL_INTERVAL
+ExecStart=$VENV_PYTHON email_poller.py
+Restart=always
+RestartSec=3
+StandardOutput=append:$LOGS_DIR/email-poller.out.log
+StandardError=append:$LOGS_DIR/email-poller.err.log
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+chmod 600 "$UNIT_PATH"  # contient le secret Azure AD : lecture réservée à root
 
 # Sentinelle de redémarrage (core.self_update.appliquer_mise_a_jour) : posée par
 # l'app à chaque mise à jour applicative pour faire redémarrer un service de fetch
@@ -128,19 +115,17 @@ chmod 600 "$PLIST_PATH"  # contient le secret Azure AD : lecture réservée à r
 # CE service laisse ce fichier trainer sans qu'il ait jamais été lu - au tout
 # premier démarrage ci-dessous, email_poller.py la trouve, l'interprète comme "un
 # redémarrage vient d'être demandé" et s'arrête après quelques secondes (log
-# "Redémarrage demandé depuis l'application"). Avec KeepAlive, launchd le relance
-# aussitôt, mais un cycle démarrage/arrêt quasi immédiat peut déclencher le throttle
-# de launchd (délai de redémarrage croissant) - de toute façon sans objet pour un
-# service qui vient d'être (ré)installé avec du code déjà à jour : purgée avant le
-# premier démarrage.
+# "Redémarrage demandé depuis l'application"). Avec Restart=always, systemd le
+# relance aussitôt sans dommage (pas de protection anti-boucle façon NSSM ici),
+# mais elle est de toute façon sans objet pour un service qui vient d'être
+# (ré)installé avec du code déjà à jour : purgée avant le premier démarrage.
 rm -f "$REPO_ROOT/data/.fetch_mail_restart_requested"
 
-launchctl bootstrap system "$PLIST_PATH"
-launchctl enable "system/$LABEL"
-launchctl kickstart -k "system/$LABEL"
+systemctl daemon-reload
+systemctl enable --now "$SERVICE_NAME"
 
 sleep 2
 echo
 echo "=== Installation terminée ==="
-launchctl print "system/$LABEL" 2>/dev/null | grep -E "state|pid" || true
+systemctl status "$SERVICE_NAME" --no-pager -l 2>/dev/null | head -5 || true
 echo "Logs : $LOGS_DIR/email-poller.*.log"
