@@ -179,6 +179,16 @@ with tab_sauvegarde:
     # en 2 sections consécutives cassait ce lien logique. L'export xlsx, sans rapport
     # avec la restauration, est isolé dans sa propre section plus bas pour ne pas
     # se retrouver mélangé avec les 2 boutons qui, eux, se répondent.
+    # Hauteur du bouton "Télécharger la sauvegarde" alignée sur celle de la zone
+    # d'upload en vis-à-vis (cs2 ci-dessous), pour que les 2 actions qui se répondent
+    # gardent le même gabarit visuel côte à côte. Injecté ICI, avant les colonnes :
+    # à l'intérieur de cs1 ce st.markdown ajoute son propre bloc invisible dans le
+    # flux et décale le bouton vers le bas, désalignant son bord supérieur avec
+    # celui de l'uploader.
+    st.markdown(
+        "<style>.st-key-btn_telecharger_sauvegarde button { height: 68px; }</style>",
+        unsafe_allow_html=True,
+    )
     with st.container(border=True):
         cs1, cs2 = st.columns(2)
 
@@ -208,12 +218,6 @@ with tab_sauvegarde:
             }
             contenu_json = json.dumps(sauvegarde, ensure_ascii=False, indent=2)
             nom_fichier = f"sauvegarde_{client_id}_{now_local().strftime('%Y%m%d_%H%M%S')}.json"
-            # Hauteur alignée sur celle de la zone d'upload en vis-à-vis (cs2), pour que
-            # les 2 actions qui se répondent gardent le même gabarit visuel côte à côte.
-            st.markdown(
-                "<style>.st-key-btn_telecharger_sauvegarde button { height: 68px; }</style>",
-                unsafe_allow_html=True,
-            )
             st.download_button(
                 "Télécharger la sauvegarde (.json)",
                 data=contenu_json,
