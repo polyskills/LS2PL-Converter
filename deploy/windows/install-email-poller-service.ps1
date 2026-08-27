@@ -63,7 +63,11 @@ $RepoRoot = Get-RepoRoot
 
 foreach ($var in @("LSPENNYLANE_AZURE_CLIENT_ID", "LSPENNYLANE_AZURE_CLIENT_SECRET")) {
     if (-not [Environment]::GetEnvironmentVariable($var, "Machine")) {
-        throw "Variable d'environnement machine manquante : $var. Définissez-la avant de relancer ce script."
+        # Simple avertissement, pas un blocage : ces variables ne sont qu'un repli
+        # "legacy, un seul client par serveur" (cf. core/email_poller.py) - si chaque
+        # client a ses propres identifiants renseignés dans Réglages > Gestion Email
+        # (le chemin recommandé), le service fonctionne très bien sans elles.
+        Write-Warning "Variable d'environnement machine absente : $var. Le service ne pourra traiter que les clients ayant leurs propres identifiants Azure renseignés dans Réglages > Gestion Email."
     }
 }
 
