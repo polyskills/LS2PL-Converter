@@ -422,12 +422,18 @@ with tab_infos:
         # de navigation que la redirection automatique (injecter un VRAI <script>, jamais innerHTML,
         # dans le document PARENT hors du sandbox de l'iframe) fonctionne, lui, de façon fiable :
         # vérifié aussi en conditions réelles, aucun nouvel onglet, reste sur le même onglet.
+        #
+        # Cible : window.location.reload() plutôt que window.location.origin. Ce dernier ne
+        # renvoie QUE protocole+domaine+port, sans aucun chemin - sur un déploiement réel derrière
+        # un reverse proxy qui ajoute un préfixe de chemin (ex. /clients/...), ça retombait hors de
+        # l'app, obligeant à corriger l'URL à la main. reload() recharge la page ACTUELLEMENT
+        # affichée, quel que soit son chemin - toujours valide, aucune URL à reconstruire soi-même.
         if st.button("🔄 Rafraîchir la page"):
             components.html(
                 r"""
                 <script>
                 const s = window.parent.document.createElement('script');
-                s.textContent = "window.location.href = window.location.origin;";
+                s.textContent = "window.location.reload();";
                 window.parent.document.body.appendChild(s);
                 </script>
                 """,
