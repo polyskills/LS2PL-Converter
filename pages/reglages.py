@@ -208,12 +208,19 @@ with tab_sauvegarde:
             }
             contenu_json = json.dumps(sauvegarde, ensure_ascii=False, indent=2)
             nom_fichier = f"sauvegarde_{client_id}_{now_local().strftime('%Y%m%d_%H%M%S')}.json"
+            # Hauteur alignée sur celle de la zone d'upload en vis-à-vis (cs2), pour que
+            # les 2 actions qui se répondent gardent le même gabarit visuel côte à côte.
+            st.markdown(
+                "<style>.st-key-btn_telecharger_sauvegarde button { height: 68px; }</style>",
+                unsafe_allow_html=True,
+            )
             st.download_button(
                 "Télécharger la sauvegarde (.json)",
                 data=contenu_json,
                 file_name=nom_fichier,
                 mime="application/json",
                 use_container_width=True,
+                key="btn_telecharger_sauvegarde",
             )
 
         with cs2:
