@@ -45,8 +45,8 @@ if client_id is None:
 mappings = load_mappings(client_id)
 client = get_client(client_id)
 
-tab_generaux, tab_email, tab_sauvegarde, tab_authentification, tab_infos = st.tabs(
-    ["Paramètres généraux", "Gestion Email", "Sauvegarde", "Authentification", "Informations"]
+tab_generaux, tab_email, tab_sauvegarde, tab_authentification, tab_maj, tab_infos = st.tabs(
+    ["Paramètres généraux", "Gestion Email", "Sauvegarde", "Authentification", "Mises à jour", "Informations"]
 )
 
 with tab_generaux:
@@ -359,7 +359,7 @@ with tab_authentification:
     if st.session_state.pop("_auth_desactivee", None):
         st.success("✅ Authentification désactivée.")
 
-with tab_infos:
+with tab_maj:
     st.subheader("🔄 Mise à jour de l'application")
     st.caption(
         "Récupère et installe la dernière version publiée sur la branche suivie, sans passer par un "
@@ -440,7 +440,7 @@ with tab_infos:
                 height=0,
             )
 
-    st.divider()
+with tab_infos:
     st.subheader("🔧 Informations techniques")
     st.caption(
         "Anciennement dans le menu latéral de chaque page ; rassemblé ici pour désencombrer la navigation."
