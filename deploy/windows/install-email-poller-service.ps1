@@ -112,6 +112,20 @@ New-Item -ItemType Directory -Force -Path $LogsDir | Out-Null
 # de plus à faire ici tant qu'elles sont définies au niveau "Machine" (pas juste
 # "Utilisateur"), sans quoi le service ne les verrait pas.
 
+# Sentinelle de redémarrage (core.self_update.appliquer_mise_a_jour) : posée par
+# l'app à chaque mise à jour applicative pour faire redémarrer un service de fetch
+# mail déjà EN COURS D'EXÉCUTION. Une mise à jour appliquée avant l'installation de
+# CE service laisse ce fichier trainer sans qu'il ait jamais été lu - au tout
+# premier démarrage ci-dessous, email_poller.py la trouve, l'interprète comme "un
+# redémarrage vient d'être demandé" et s'arrête après quelques secondes (log
+# "Redémarrage demandé depuis l'application"). NSSM le relance aussitôt, mais ce
+# cycle démarrage/arrêt quasi immédiat suffit à déclencher sa protection anti-boucle
+# (service mis en SERVICE_PAUSED au lieu de SERVICE_RUNNING). Sans objet pour un
+# service qui vient d'être (ré)installé avec du code déjà à jour : purgée avant le
+# premier démarrage.
+$SentinelleRedemarrage = Join-Path $RepoRoot "data\.fetch_mail_restart_requested"
+Remove-Item -Path $SentinelleRedemarrage -ErrorAction SilentlyContinue
+
 & $NssmExe start $ServiceName
 
 Start-Sleep -Seconds 3
