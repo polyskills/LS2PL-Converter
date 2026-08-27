@@ -55,6 +55,56 @@ if is_auth_active() and not st.session_state.get("_authentifie"):
 
 st.logo("assets/logo.png", size="large")
 
+# Rend le logo cliquable vers la racine "/" du site (rechargement complet, pas une
+# navigation interne Streamlit) : permet de vérifier en un clic que tout est bien
+# rechargé après une modification du code, sans retomber sur le bug de navigation
+# "brute" de Streamlit qui apparaît quand une page autre que "/" est la première
+# servie après un redémarrage (cf. bouton "Rafraîchir la page" de Réglages > Mises
+# à jour). st.logo() n'expose que `link` (URL http(s) absolue, donc pas de "/" relatif
+# utilisable ici) et n'accepte pas d'onclick : on attache donc le clic en JS.
+#
+# components.html() s'exécute dans une iframe sandboxée sans allow-top-navigation :
+# toute navigation lancée directement depuis ce contexte est bloquée silencieusement
+# par le navigateur. Contournement (identique à celui du bouton de rafraîchissement) :
+# injecter un vrai <script> dans le document PARENT (document.createElement + append,
+# jamais innerHTML - les navigateurs n'exécutent pas les <script> posés par innerHTML)
+# pour que le code, y compris le futur gestionnaire de clic, s'exécute dans le
+# contexte non sandboxé du parent.
+components.html(
+    r"""
+    <script>
+    const s = window.parent.document.createElement('script');
+    s.textContent = `
+        (function() {
+            function attacherClicLogo() {
+                document.querySelectorAll('[data-testid="stSidebarLogo"]').forEach(function(logo) {
+                    if (logo.dataset.clicVersAccueil) return;
+                    logo.dataset.clicVersAccueil = "1";
+                    logo.style.cursor = "pointer";
+                    logo.title = "Retour à l'accueil (rechargement complet)";
+                    logo.addEventListener("click", function() {
+                        window.location.href = window.location.origin + "/";
+                    });
+                });
+            }
+            attacherClicLogo();
+            // Le noeud <img> du logo est recréé à chaque rerun Streamlit (page changée,
+            // widget modifié...) : un MutationObserver le réattache alors automatiquement,
+            // plutôt que de dépendre d'un nouvel appel de ce composant à chaque rerun.
+            // Un seul observer pour toute la session (sinon chaque rerun en empilerait un
+            // nouveau, tous redondants).
+            if (!window.__ls2plLogoObserverInstalle) {
+                window.__ls2plLogoObserverInstalle = true;
+                new MutationObserver(attacherClicLogo).observe(document.body, {childList: true, subtree: true});
+            }
+        })();
+    `;
+    window.parent.document.body.appendChild(s);
+    </script>
+    """,
+    height=0,
+)
+
 # st.logo() plafonne la hauteur de l'image (32px max, quel que soit `size`) : bien
 # trop petit pour ce logo. C'est pourtant le seul mécanisme Streamlit qui place une
 # image AU-DESSUS du menu de navigation (celui-ci occupe toujours le haut de la
