@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Installe le convertisseur LightSpeed -> Pennylane comme service Windows
     (démarrage automatique au boot, redémarre seul en cas de plantage),
@@ -34,7 +34,7 @@ param(
 $ErrorActionPreference = "Stop"
 # Sur PowerShell 7.3+, la seule présence d'un écrit sur stderr par un .exe externe (même
 # anodin, ex. nssm.exe signalant qu'un service n'existe pas encore) devient par défaut une
-# erreur bloquante avec $ErrorActionPreference = "Stop" — sans lien avec le code de sortie
+# erreur bloquante avec $ErrorActionPreference = "Stop" - sans lien avec le code de sortie
 # réel de la commande. Revient au comportement historique (seule une vraie exception .NET ou
 # un $LASTEXITCODE vérifié explicitement arrête le script). Ignoré sans effet sur Windows
 # PowerShell 5.1, qui ne connaît pas cette variable.

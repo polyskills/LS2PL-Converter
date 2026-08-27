@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Met à jour l'application (git pull + dépendances) puis redémarre le
     service Windows.
@@ -15,7 +15,7 @@ param(
 $ErrorActionPreference = "Stop"
 # Sur PowerShell 7.3+, la seule présence d'un écrit sur stderr par un .exe externe (même
 # anodin, ex. nssm.exe) devient par défaut une erreur bloquante avec
-# $ErrorActionPreference = "Stop" — sans lien avec le code de sortie réel de la commande.
+# $ErrorActionPreference = "Stop" - sans lien avec le code de sortie réel de la commande.
 # Revient au comportement historique. Ignoré sans effet sur Windows PowerShell 5.1.
 $PSNativeCommandUseErrorActionPreference = $false
 

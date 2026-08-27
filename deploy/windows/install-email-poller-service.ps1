@@ -1,8 +1,8 @@
-<#
+﻿<#
 .SYNOPSIS
     Installe le service de fetch automatique des exports LightSpeed reçus
     par mail (email_poller.py), en complément du service applicatif
-    (install-service.ps1) — même dépôt, même environnement virtuel .venv.
+    (install-service.ps1) - même dépôt, même environnement virtuel .venv.
 
 .DESCRIPTION
     A exécuter dans un PowerShell "Exécuter en tant qu'administrateur",
@@ -18,7 +18,7 @@
       - LSPENNYLANE_POLL_INTERVAL_SECONDS : intervalle en secondes (optionnel, défaut 300)
 
     Le tenant M365 et la boîte mail à interroger se configurent, eux, par
-    client dans l'application (page Clients) — pas via ce script.
+    client dans l'application (page Clients) - pas via ce script.
 
 .PARAMETER ServiceName
     Nom du service Windows créé (par défaut LightspeedPennylaneFetchMail).
@@ -34,7 +34,7 @@ param(
 $ErrorActionPreference = "Stop"
 # Sur PowerShell 7.3+, la seule présence d'un écrit sur stderr par un .exe externe (même
 # anodin, ex. nssm.exe signalant qu'un service n'existe pas encore) devient par défaut une
-# erreur bloquante avec $ErrorActionPreference = "Stop" — sans lien avec le code de sortie
+# erreur bloquante avec $ErrorActionPreference = "Stop" - sans lien avec le code de sortie
 # réel de la commande. Revient au comportement historique (seule une vraie exception .NET ou
 # un $LASTEXITCODE vérifié explicitement arrête le script). Ignoré sans effet sur Windows
 # PowerShell 5.1, qui ne connaît pas cette variable.
@@ -69,14 +69,14 @@ foreach ($var in @("LSPENNYLANE_AZURE_CLIENT_ID", "LSPENNYLANE_AZURE_CLIENT_SECR
 
 $VenvPython = Join-Path $RepoRoot ".venv\Scripts\python.exe"
 if (-not (Test-Path $VenvPython)) {
-    throw "$VenvPython introuvable — lancez d'abord install-service.ps1 (crée l'environnement virtuel partagé)."
+    throw "$VenvPython introuvable - lancez d'abord install-service.ps1 (crée l'environnement virtuel partagé)."
 }
 & $VenvPython -m pip install -r (Join-Path $RepoRoot "requirements.txt") --quiet
 
 $ToolsDir = Join-Path $RepoRoot "deploy\windows\tools"
 $NssmExe = Join-Path $ToolsDir "nssm.exe"
 if (-not (Test-Path $NssmExe)) {
-    throw "NSSM introuvable — lancez d'abord install-service.ps1."
+    throw "NSSM introuvable - lancez d'abord install-service.ps1."
 }
 
 # Get-Service (cmdlet native PowerShell), pas "nssm status" : sur PowerShell 7.3+,
