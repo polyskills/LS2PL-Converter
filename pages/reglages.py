@@ -453,7 +453,7 @@ with tab_maj:
                 r"""
                 <script>
                 const s = window.parent.document.createElement('script');
-                s.textContent = "window.location.href = window.location.origin;";
+                s.textContent = "window.location.href = window.location.origin + '/';";
                 window.parent.document.body.appendChild(s);
                 </script>
                 """,
