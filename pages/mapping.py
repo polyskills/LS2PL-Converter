@@ -10,7 +10,7 @@ import pandas as pd
 import streamlit as st
 
 from core.client_store import get_client
-from core.mapping_store import load_mappings, reset_to_empty, save_mappings, seed_with_examples
+from core.mapping_store import TOUS_POINTS_DE_VENTE, load_mappings, reset_to_empty, save_mappings, seed_with_examples
 from core.timezone import now_local
 from core.ui_common import select_client
 
@@ -151,6 +151,12 @@ mappings = load_mappings(client_id)
 # Basé sur l'état ENREGISTRÉ (comme comptes_options, codes_analytiques_options) : un point de
 # vente tout juste ajouté n'apparaît dans les menus déroulants qu'après un premier enregistrement.
 pdv_options = [p["code"] for p in mappings.get("points_de_vente", [])]
+# "TOUS" en tête : point de vente générique de la table « Moyens de paiements »
+# (cf. TOUS_POINTS_DE_VENTE) - valeur par défaut pour la quasi-totalité des
+# moyens de paiement, qui n'ont pas besoin d'un compte différent par point de
+# vente ; une ligne par point de vente réel ne sert que pour ceux qui varient
+# réellement (ex. Espèces si la caisse est séparée par point de vente).
+pdv_options_avec_tous = [TOUS_POINTS_DE_VENTE] + pdv_options
 
 (
     tab_pdv,
@@ -384,10 +390,15 @@ with tab_paiement:
         "Correspondance entre chaque **mode de paiement LightSpeed** (Carte bleue, Espèces, "
         "Deliveroo, UberEats...) et son **compte de contrepartie** (banque, caisse, créance "
         "plateforme) dans Pennylane. Un mode de paiement non mappé bloque également l'export "
-        "(l'écriture serait déséquilibrée)."
+        "(l'écriture serait déséquilibrée). Point de vente **« TOUS »** par défaut (compte "
+        "unique quel que soit le point de vente) — n'ajouter une ligne par point de vente que "
+        "pour un mode de paiement qui a réellement besoin d'un compte différent selon le point "
+        "de vente d'origine (ex. Espèces, si la caisse est séparée par point de vente) : cette "
+        "ligne spécifique prime alors sur la ligne « TOUS » du même mode de paiement."
     )
     tri_paiement, decroissant_paiement = _selecteur_tri(
         {
+            "point_de_vente": "Point de vente",
             "mode_paiement": "Mode de paiement LightSpeed",
             "compte": "Compte de contrepartie",
             "libelle_compte": "Libellé du compte",
@@ -399,7 +410,7 @@ with tab_paiement:
     edited_paiement_df = st.data_editor(
         _as_editable_df(
             mappings.get("comptes_paiement", []),
-            ["mode_paiement", "compte", "libelle_compte", "commentaires"],
+            ["point_de_vente", "mode_paiement", "compte", "libelle_compte", "commentaires"],
             tri=tri_paiement,
             decroissant=decroissant_paiement,
         ),
@@ -407,6 +418,9 @@ with tab_paiement:
         use_container_width=True,
         key="editor_paiement",
         column_config={
+            "point_de_vente": st.column_config.SelectboxColumn(
+                "Point de vente", options=pdv_options_avec_tous, required=True, default=TOUS_POINTS_DE_VENTE
+            ),
             "mode_paiement": st.column_config.TextColumn("Mode de paiement LightSpeed", required=True),
             "compte": st.column_config.TextColumn("Compte de contrepartie", required=True),
             "libelle_compte": st.column_config.TextColumn("Libellé du compte"),

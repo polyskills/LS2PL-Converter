@@ -410,3 +410,85 @@ def test_convert_pourboire_compte_different_selon_le_point_de_vente():
     assert res_bar.sans_erreur, res_bar.erreurs
     ligne_bar = next(l for l in res_bar.lignes if l["Libellé de ligne"] == "Pourboire VISA MASTERCARD")
     assert ligne_bar["Numéro de compte"] == "462201"
+
+
+def test_convert_compte_paiement_ligne_tous_sert_a_tout_point_de_vente_sans_ligne_dediee():
+    # Reproduit le cas rapporté : ESPECES doit créditer un compte différent selon le point de
+    # vente (REST vs BARF), alors que VISA MASTERCARD n'a qu'une ligne "TOUS" (comme la grande
+    # majorité des moyens de paiement) et doit donc utiliser ce même compte quel que soit le
+    # point de vente concerné.
+    export = parse_lightspeed_export(_SAMPLE_CSV_AVEC_POURBOIRES, "export.csv")
+    mappings_communs = {
+        "comptes_de_vente": [{"compte": "70110200", "libelle_compte": "VENTE LIQUIDE TVA 20%"}],
+        "departements": [{"categorie_lightspeed": "Plat", "compte": "70110200", "taux_tva": "20%"}],
+        "comptes_paiement": [
+            {"point_de_vente": "TOUS", "mode_paiement": "VISA MASTERCARD", "compte": "511100", "libelle_compte": "Remises CB"},
+            {"point_de_vente": "REST", "mode_paiement": "ESPECES", "compte": "530000", "libelle_compte": "Caisse - Restaurant"},
+            {"point_de_vente": "BARF", "mode_paiement": "ESPECES", "compte": "530001", "libelle_compte": "Caisse - Bar"},
+        ],
+        "comptes_pourboires": [
+            {"point_de_vente": "REST", "mode_paiement": "VISA MASTERCARD", "compte": "462200", "libelle_compte": "Pourboires CB"},
+            {"point_de_vente": "BARF", "mode_paiement": "VISA MASTERCARD", "compte": "462200", "libelle_compte": "Pourboires CB"},
+        ],
+    }
+
+    res_rest = convert(
+        export,
+        {
+            **DEFAULT_MAPPINGS,
+            **mappings_communs,
+            "comptes_analytiques": [
+                {"compte": "70110200", "point_de_vente": "REST", "categorie_lightspeed": "Plat", "code_analytique": "REST"}
+            ],
+        },
+        point_de_vente="REST",
+        date_piece="11/08/26",
+        numero_piece="LS-TEST-REST",
+    )
+    assert res_rest.sans_erreur, res_rest.erreurs
+    assert next(l for l in res_rest.lignes if l["Libellé de ligne"] == "ESPECES")["Numéro de compte"] == "530000"
+    # VISA MASTERCARD retombe sur la ligne "TOUS" (pas de ligne "REST" dédiée) : même compte
+    # que pour BARF ci-dessous.
+    assert next(l for l in res_rest.lignes if l["Libellé de ligne"] == "VISA MASTERCARD")["Numéro de compte"] == "511100"
+
+    res_bar = convert(
+        export,
+        {
+            **DEFAULT_MAPPINGS,
+            **mappings_communs,
+            "comptes_analytiques": [
+                {"compte": "70110200", "point_de_vente": "BARF", "categorie_lightspeed": "Plat", "code_analytique": "BARF"}
+            ],
+        },
+        point_de_vente="BARF",
+        date_piece="11/08/26",
+        numero_piece="LS-TEST-BARF",
+    )
+    assert res_bar.sans_erreur, res_bar.erreurs
+    assert next(l for l in res_bar.lignes if l["Libellé de ligne"] == "ESPECES")["Numéro de compte"] == "530001"
+    assert next(l for l in res_bar.lignes if l["Libellé de ligne"] == "VISA MASTERCARD")["Numéro de compte"] == "511100"
+
+
+def test_convert_compte_paiement_sans_point_de_vente_traite_comme_tous():
+    # Compatibilité ascendante : une ligne sans "point_de_vente" du tout (référentiel d'une
+    # version antérieure à cette colonne) doit continuer à s'appliquer à tout point de vente,
+    # exactement comme une ligne "TOUS" explicite.
+    export = parse_lightspeed_export(_SAMPLE_CSV_AVEC_POURBOIRES, "export.csv")
+    mappings = {
+        **DEFAULT_MAPPINGS,
+        "comptes_de_vente": [{"compte": "70110200", "libelle_compte": "VENTE LIQUIDE TVA 20%"}],
+        "departements": [{"categorie_lightspeed": "Plat", "compte": "70110200", "taux_tva": "20%"}],
+        "comptes_analytiques": [
+            {"compte": "70110200", "point_de_vente": "REST", "categorie_lightspeed": "Plat", "code_analytique": "REST"}
+        ],
+        "comptes_paiement": [
+            {"mode_paiement": "ESPECES", "compte": "530000", "libelle_compte": "Caisse"},  # pas de point_de_vente
+            {"mode_paiement": "VISA MASTERCARD", "compte": "511100", "libelle_compte": "Remises CB"},
+        ],
+        "comptes_pourboires": [
+            {"point_de_vente": "REST", "mode_paiement": "VISA MASTERCARD", "compte": "462200", "libelle_compte": "Pourboires CB"},
+        ],
+    }
+    res = convert(export, mappings, point_de_vente="REST", date_piece="11/08/26", numero_piece="LS-TEST")
+    assert res.sans_erreur, res.erreurs
+    assert next(l for l in res.lignes if l["Libellé de ligne"] == "ESPECES")["Numéro de compte"] == "530000"

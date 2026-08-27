@@ -29,7 +29,17 @@ Tables :
                          un cas réel : si un cas s'avère non réductible à
                          cette combinaison figée, une résolution dynamique
                          sera nécessaire à la place.
-- comptes_paiement     : Mode de paiement LightSpeed -> Compte de contrepartie (banque/caisse)
+- comptes_paiement     : Mode de paiement LightSpeed -> Compte de contrepartie (banque/caisse).
+                         Point de vente optionnel : la plupart des moyens de paiement ont un
+                         compte unique quel que soit le point de vente (point_de_vente = "TOUS",
+                         la valeur par défaut) ; certains (ex. Espèces, si la caisse est séparée
+                         par point de vente) ont besoin d'un compte différent selon le point de
+                         vente d'origine - ajouter alors une ligne dédiée avec le point de vente
+                         concerné, elle prime sur la ligne "TOUS" pour ce point de vente précis
+                         (cf. find_compte_paiement). Une ligne par point de vente n'est donc
+                         nécessaire QUE pour les moyens qui varient réellement - contrairement à
+                         comptes_pourboires, où le point de vente est de toute façon indispensable
+                         à chaque ligne.
 - comptes_pourboires   : (Point de vente, Mode de paiement) -> Compte de vente crédité du
                          pourboire de ce mode POUR ce point de vente (ex. un compte pour les
                          espèces du restaurant, un autre pour les espèces du bar - même mode de
@@ -68,6 +78,12 @@ import os
 import pandas as pd
 
 from core.client_store import client_mappings_path
+
+# Point de vente générique de la table « Moyens de paiement » (cf. docstring du
+# module) : une ligne portant cette valeur s'applique à tout point de vente sans
+# ligne plus spécifique. Valeur explicite plutôt qu'un champ vide, pour ne pas
+# laisser croire à un oubli de saisie en le lisant dans le tableau.
+TOUS_POINTS_DE_VENTE = "TOUS"
 
 EMPTY_MAPPINGS = {
     "parametres": {
@@ -130,14 +146,15 @@ DEFAULT_MAPPINGS = {
         for dep in ("Alcool (200)", "Vin et Champagne")
     ],
     "comptes_paiement": [
-        {"mode_paiement": "Carte bleue", "compte": "511100", "libelle_compte": "Remises de cartes bancaires"},
-        {"mode_paiement": "Espèces", "compte": "530000", "libelle_compte": "Caisse"},
-        {"mode_paiement": "Chèque", "compte": "511200", "libelle_compte": "Chèques à encaisser"},
-        {"mode_paiement": "Ticket restaurant", "compte": "511300", "libelle_compte": "Titres restaurant à encaisser"},
-        {"mode_paiement": "Deliveroo", "compte": "411100", "libelle_compte": "Créances plateformes de livraison - Deliveroo"},
-        {"mode_paiement": "UberEats", "compte": "411110", "libelle_compte": "Créances plateformes de livraison - UberEats"},
-        {"mode_paiement": "Lightspeed Payments", "compte": "511400", "libelle_compte": "Lightspeed Payments à encaisser"},
-        {"mode_paiement": "Tap to Pay sur iPhone", "compte": "511100", "libelle_compte": "Remises de cartes bancaires"},
+        {"point_de_vente": TOUS_POINTS_DE_VENTE, "mode_paiement": "Carte bleue", "compte": "511100", "libelle_compte": "Remises de cartes bancaires"},
+        {"point_de_vente": "REST", "mode_paiement": "Espèces", "compte": "530000", "libelle_compte": "Caisse - Restaurant"},
+        {"point_de_vente": "BARF", "mode_paiement": "Espèces", "compte": "530001", "libelle_compte": "Caisse - Bar"},
+        {"point_de_vente": TOUS_POINTS_DE_VENTE, "mode_paiement": "Chèque", "compte": "511200", "libelle_compte": "Chèques à encaisser"},
+        {"point_de_vente": TOUS_POINTS_DE_VENTE, "mode_paiement": "Ticket restaurant", "compte": "511300", "libelle_compte": "Titres restaurant à encaisser"},
+        {"point_de_vente": TOUS_POINTS_DE_VENTE, "mode_paiement": "Deliveroo", "compte": "411100", "libelle_compte": "Créances plateformes de livraison - Deliveroo"},
+        {"point_de_vente": TOUS_POINTS_DE_VENTE, "mode_paiement": "UberEats", "compte": "411110", "libelle_compte": "Créances plateformes de livraison - UberEats"},
+        {"point_de_vente": TOUS_POINTS_DE_VENTE, "mode_paiement": "Lightspeed Payments", "compte": "511400", "libelle_compte": "Lightspeed Payments à encaisser"},
+        {"point_de_vente": TOUS_POINTS_DE_VENTE, "mode_paiement": "Tap to Pay sur iPhone", "compte": "511100", "libelle_compte": "Remises de cartes bancaires"},
     ],
     "comptes_pourboires": [
         {"point_de_vente": "REST", "mode_paiement": "Espèces", "compte": "462100", "libelle_compte": "Pourboires à reverser - espèces - Restaurant"},
@@ -265,12 +282,27 @@ def find_code_analytique(mappings: dict, compte: str, point_de_vente: str, categ
     return None
 
 
-def find_compte_paiement(mappings: dict, mode_paiement: str) -> dict | None:
-    target = _norm_key(mode_paiement)
+def find_compte_paiement(mappings: dict, point_de_vente: str, mode_paiement: str) -> dict | None:
+    """Compte de contrepartie d'un mode de paiement. Cherche d'abord une ligne
+    dédiée à CE point de vente précis ; à défaut, retombe sur la ligne "TOUS"
+    du même mode de paiement (cf. TOUS_POINTS_DE_VENTE et la docstring du
+    module) - la grande majorité des moyens de paiement n'ont qu'une ligne
+    "TOUS" et n'ont donc jamais besoin de ligne par point de vente. Une ligne
+    sans point_de_vente renseigné (fichier d'une version antérieure à cette
+    colonne) est traitée comme "TOUS", pour ne rien casser sur les données
+    existantes."""
+    target_pdv = _norm_key(point_de_vente)
+    target_mode = _norm_key(mode_paiement)
+    ligne_tous = None
     for row in mappings.get("comptes_paiement", []):
-        if _norm_key(row.get("mode_paiement", "")) == target:
+        if _norm_key(row.get("mode_paiement", "")) != target_mode:
+            continue
+        pdv_ligne = _norm_key(row.get("point_de_vente", "")) or _norm_key(TOUS_POINTS_DE_VENTE)
+        if pdv_ligne == target_pdv:
             return row
-    return None
+        if pdv_ligne == _norm_key(TOUS_POINTS_DE_VENTE):
+            ligne_tous = row
+    return ligne_tous
 
 
 def find_compte_pourboire(mappings: dict, point_de_vente: str, mode_paiement: str) -> dict | None:
@@ -363,7 +395,7 @@ _TABLES_EXPORT_GLOBAL = [
     ("Points de vente", "points_de_vente", ["code", "libelle", "adresse_email", "adresse_resultat", "commentaires"]),
     ("Comptes de vente PL", "comptes_de_vente", ["compte", "libelle_compte", "commentaires"]),
     ("Codes Analytique PL", "codes_analytiques", ["code_analytique", "description", "commentaires"]),
-    ("Moyens de paiements", "comptes_paiement", ["mode_paiement", "compte", "libelle_compte", "commentaires"]),
+    ("Moyens de paiements", "comptes_paiement", ["point_de_vente", "mode_paiement", "compte", "libelle_compte", "commentaires"]),
     ("Comptes de pourboires", "comptes_pourboires", ["point_de_vente", "mode_paiement", "compte", "libelle_compte", "commentaires"]),
     ("Moyens paiement ignorés", "modes_paiement_ignores", ["mode_paiement", "commentaires"]),
     ("Taux de TVA", "comptes_tva", ["taux", "compte", "libelle_compte", "commentaires"]),

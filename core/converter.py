@@ -213,11 +213,12 @@ def convert(
                 f"({p.montant:.2f} € exclu de l'écriture, aucune ligne générée)."
             )
             continue
-        compte_p = find_compte_paiement(mappings, p.libelle)
+        compte_p = find_compte_paiement(mappings, point_de_vente, p.libelle)
         if compte_p is None:
             res.erreurs.append(
-                f"Mode de paiement « {p.libelle} » non mappé dans « Comptes de contrepartie » "
-                f"→ encaissement de {p.montant:.2f} € non converti (écriture déséquilibrée)."
+                f"Mode de paiement « {p.libelle} » (point de vente « {point_de_vente} ») non mappé "
+                f"dans « Comptes de contrepartie » → encaissement de {p.montant:.2f} € non converti "
+                "(écriture déséquilibrée)."
             )
             continue
         debit = round(p.montant, 2) if p.montant >= 0 else 0
