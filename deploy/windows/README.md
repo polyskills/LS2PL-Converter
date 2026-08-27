@@ -101,6 +101,21 @@ l'adresse `LSPENNYLANE_ALERTE_INTERNE` est notifiée, avec le détail de
 l'erreur, pour correction manuelle du référentiel puis reprise via l'import
 manuel habituel.
 
+### Modifier l'intervalle entre deux fetch
+
+Une fois le service installé, l'intervalle (300 secondes par défaut) se
+change en modifiant la variable d'environnement **machine**
+`LSPENNYLANE_POLL_INTERVAL_SECONDS` puis en redémarrant le service — la
+valeur n'est lue qu'au démarrage du process, jamais relue en cours de route :
+
+```powershell
+[Environment]::SetEnvironmentVariable("LSPENNYLANE_POLL_INTERVAL_SECONDS", "120", "Machine")
+.\deploy\windows\tools\nssm.exe restart LightspeedPennylaneFetchMail
+```
+
+(`"Machine"`, pas `"User"` : une variable définie seulement au niveau
+utilisateur ne serait pas vue par le service.)
+
 ## Mettre à jour l'application
 
 À chaque évolution du code (nouveau commit sur la branche) :

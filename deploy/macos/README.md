@@ -108,6 +108,31 @@ conversion (mapping manquant, fichier illisible...) — dans ce cas, seule
 l'adresse `--alerte-interne` est notifiée, avec le détail de l'erreur, pour
 correction manuelle du référentiel puis reprise via l'import manuel habituel.
 
+### Modifier l'intervalle entre deux fetch
+
+Contrairement à Windows (variable d'environnement "Machine"), macOS n'a pas
+d'équivalent réglable en dehors du plist du service : la valeur (300
+secondes par défaut) y est écrite en dur à l'installation. Pour la changer,
+relancer l'installation avec `--poll-interval` (elle arrête et recrée le
+service proprement, avec les mêmes `--azure-client-id`/`--azure-client-secret`
+si vous les utilisiez) :
+
+```bash
+sudo ./deploy/macos/install-email-poller-service.sh --poll-interval 120
+```
+
+Alternative sans réinstaller : éditer directement la valeur de
+`LSPENNYLANE_POLL_INTERVAL_SECONDS` dans
+`/Library/LaunchDaemons/com.polyskills.lightspeed-pennylane-fetchmail.plist`
+(nom du fichier différent si `--service-name` personnalisé à l'installation),
+puis recharger le service — `kickstart` seul ne suffit pas, il faut sortir le
+service puis le réenregistrer pour que launchd relise le plist modifié :
+
+```bash
+sudo launchctl bootout system/com.polyskills.lightspeed-pennylane-fetchmail
+sudo launchctl bootstrap system /Library/LaunchDaemons/com.polyskills.lightspeed-pennylane-fetchmail.plist
+```
+
 ## Mettre à jour l'application
 
 À chaque évolution du code (nouveau commit sur la branche) :
