@@ -314,7 +314,7 @@ def test_convert_pourboire_credite_le_compte_dedie_sans_tva():
             {"mode_paiement": "VISA MASTERCARD", "compte": "511100", "libelle_compte": "Remises CB"},
         ],
         "comptes_pourboires": [
-            {"mode_paiement": "VISA MASTERCARD", "compte": "462200", "libelle_compte": "Pourboires à reverser - CB"},
+            {"point_de_vente": "REST", "mode_paiement": "VISA MASTERCARD", "compte": "462200", "libelle_compte": "Pourboires à reverser - CB"},
         ],
     }
     res = convert(export, mappings, point_de_vente="REST", date_piece="11/08/26", numero_piece="LS-TEST")
@@ -356,3 +356,57 @@ def test_convert_pourboire_sans_compte_mappe_bloque_l_export():
     assert not res.sans_erreur
     assert any("Pourboire" in e and "VISA MASTERCARD" in e for e in res.erreurs)
     assert not any(l["Libellé de ligne"] == "Pourboire VISA MASTERCARD" for l in res.lignes)
+
+
+def test_convert_pourboire_compte_different_selon_le_point_de_vente():
+    # Reproduit le cas rapporté : un même mode de paiement (VISA MASTERCARD) doit créditer un
+    # compte différent selon le point de vente d'origine (REST vs BARF) - sans le point de vente
+    # comme critère, la première ligne du référentiel gagnerait toujours, quel que soit le point
+    # de vente réellement concerné.
+    export = parse_lightspeed_export(_SAMPLE_CSV_AVEC_POURBOIRES, "export.csv")
+    mappings_communs = {
+        "comptes_de_vente": [{"compte": "70110200", "libelle_compte": "VENTE LIQUIDE TVA 20%"}],
+        "departements": [{"categorie_lightspeed": "Plat", "compte": "70110200", "taux_tva": "20%"}],
+        "comptes_paiement": [
+            {"mode_paiement": "ESPECES", "compte": "530000", "libelle_compte": "Caisse"},
+            {"mode_paiement": "VISA MASTERCARD", "compte": "511100", "libelle_compte": "Remises CB"},
+        ],
+        "comptes_pourboires": [
+            {"point_de_vente": "REST", "mode_paiement": "VISA MASTERCARD", "compte": "462200", "libelle_compte": "Pourboires CB - Restaurant"},
+            {"point_de_vente": "BARF", "mode_paiement": "VISA MASTERCARD", "compte": "462201", "libelle_compte": "Pourboires CB - Bar"},
+        ],
+    }
+
+    res_rest = convert(
+        export,
+        {
+            **DEFAULT_MAPPINGS,
+            **mappings_communs,
+            "comptes_analytiques": [
+                {"compte": "70110200", "point_de_vente": "REST", "categorie_lightspeed": "Plat", "code_analytique": "REST"}
+            ],
+        },
+        point_de_vente="REST",
+        date_piece="11/08/26",
+        numero_piece="LS-TEST-REST",
+    )
+    assert res_rest.sans_erreur, res_rest.erreurs
+    ligne_rest = next(l for l in res_rest.lignes if l["Libellé de ligne"] == "Pourboire VISA MASTERCARD")
+    assert ligne_rest["Numéro de compte"] == "462200"
+
+    res_bar = convert(
+        export,
+        {
+            **DEFAULT_MAPPINGS,
+            **mappings_communs,
+            "comptes_analytiques": [
+                {"compte": "70110200", "point_de_vente": "BARF", "categorie_lightspeed": "Plat", "code_analytique": "BARF"}
+            ],
+        },
+        point_de_vente="BARF",
+        date_piece="11/08/26",
+        numero_piece="LS-TEST-BARF",
+    )
+    assert res_bar.sans_erreur, res_bar.erreurs
+    ligne_bar = next(l for l in res_bar.lignes if l["Libellé de ligne"] == "Pourboire VISA MASTERCARD")
+    assert ligne_bar["Numéro de compte"] == "462201"

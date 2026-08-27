@@ -247,13 +247,15 @@ def convert(
 
         if p.pourboire:
             # Le montant encaissé ci-dessus reste brut (pourboire compris) : la contrepartie
-            # est cette ligne de crédit dédiée, sur un compte propre au mode de paiement
-            # (ex. espèces ≠ carte bancaire) - jamais de TVA sur un pourboire volontaire.
-            compte_pourboire = find_compte_pourboire(mappings, p.libelle)
+            # est cette ligne de crédit dédiée, sur un compte propre au (point de vente, mode de
+            # paiement) - un même mode (ex. espèces) peut créditer un compte différent selon le
+            # point de vente d'origine. Jamais de TVA sur un pourboire volontaire.
+            compte_pourboire = find_compte_pourboire(mappings, point_de_vente, p.libelle)
             if compte_pourboire is None:
                 res.erreurs.append(
-                    f"Pourboire de {p.pourboire:.2f} € sur le mode de paiement « {p.libelle} » : "
-                    "aucun compte paramétré dans « Comptes de pourboires » → écriture déséquilibrée."
+                    f"Pourboire de {p.pourboire:.2f} € sur le mode de paiement « {p.libelle} » / "
+                    f"point de vente « {point_de_vente} » : aucun compte paramétré dans « Comptes "
+                    "de pourboires » → écriture déséquilibrée."
                 )
             else:
                 res.lignes.append(

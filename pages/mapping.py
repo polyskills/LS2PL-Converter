@@ -148,6 +148,9 @@ if client_id is None:
 
 client = get_client(client_id)
 mappings = load_mappings(client_id)
+# Basé sur l'état ENREGISTRÉ (comme comptes_options, codes_analytiques_options) : un point de
+# vente tout juste ajouté n'apparaît dans les menus déroulants qu'après un premier enregistrement.
+pdv_options = [p["code"] for p in mappings.get("points_de_vente", [])]
 
 (
     tab_pdv,
@@ -415,28 +418,32 @@ with tab_paiement:
 
 with tab_pourboires:
     st.markdown(
-        "Compte de vente crédité du **pourboire** de chaque mode de paiement — le montant "
-        "encaissé (ci-dessus, onglet « Moyens de paiements ») reste **brut**, pourboire compris ; "
-        "cette table donne juste sa contrepartie, généralement **différente selon le mode de "
-        "paiement** (ex. un compte pour les espèces, un autre pour la carte bancaire). Jamais de "
-        "TVA générée sur ce montant (pourboire volontaire). Un mode de paiement avec un pourboire "
-        "non nul sur l'export mais absent d'ici bloque l'export, comme un mode de paiement non "
-        "mappé dans « Moyens de paiements »."
+        "Compte de vente crédité du **pourboire** de chaque **point de vente × mode de "
+        "paiement** — le montant encaissé (ci-dessus, onglet « Moyens de paiements ») reste "
+        "**brut**, pourboire compris ; cette table donne juste sa contrepartie. Le point de "
+        "vente est nécessaire : un même mode de paiement (ex. « Espèces ») peut créditer un "
+        "compte différent selon le point de vente d'origine (ex. restaurant vs bar). Jamais de "
+        "TVA générée sur ce montant (pourboire volontaire). Une combinaison rencontrée à la "
+        "conversion, avec un pourboire non nul, mais absente d'ici bloque l'export — comme un "
+        "mode de paiement non mappé dans « Moyens de paiements »."
     )
+    if not pdv_options:
+        st.warning("Ajoutez d'abord des points de vente dans l'onglet « Points de vente » pour pouvoir les choisir ici.")
     tri_pourboires, decroissant_pourboires = _selecteur_tri(
         {
+            "point_de_vente": "Point de vente",
             "mode_paiement": "Mode de paiement LightSpeed",
             "compte": "Compte crédité du pourboire",
             "libelle_compte": "Libellé du compte",
             "commentaires": "Commentaires",
         },
-        defaut="mode_paiement",
+        defaut="point_de_vente",
         cle="pourboires",
     )
     edited_pourboires_df = st.data_editor(
         _as_editable_df(
             mappings.get("comptes_pourboires", []),
-            ["mode_paiement", "compte", "libelle_compte", "commentaires"],
+            ["point_de_vente", "mode_paiement", "compte", "libelle_compte", "commentaires"],
             tri=tri_pourboires,
             decroissant=decroissant_pourboires,
         ),
@@ -444,6 +451,7 @@ with tab_pourboires:
         use_container_width=True,
         key="editor_pourboires",
         column_config={
+            "point_de_vente": st.column_config.SelectboxColumn("Point de vente", options=pdv_options, required=True),
             "mode_paiement": st.column_config.TextColumn("Mode de paiement LightSpeed", required=True),
             "compte": st.column_config.TextColumn("Compte crédité du pourboire", required=True),
             "libelle_compte": st.column_config.TextColumn("Libellé du compte"),
@@ -540,7 +548,6 @@ with tab_attribution:
     departements_options = [
         d["categorie_lightspeed"] for d in mappings.get("departements", []) if d.get("categorie_lightspeed")
     ]
-    pdv_options = [p["code"] for p in mappings.get("points_de_vente", [])]
     if not codes_analytiques_options:
         st.warning("Ajoutez d'abord des codes dans l'onglet « Codes Analytique PL » pour pouvoir les choisir ici.")
 
