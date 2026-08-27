@@ -212,10 +212,13 @@ with tab_sauvegarde:
             mime="application/json",
             use_container_width=True,
         )
+        st.caption("Ce fichier .json sert à la restauration ci-dessous.")
 
+    with cs2:
+        st.markdown("**Export de la Table de correspondance**")
         st.caption(
-            "Ce fichier .json sert à la restauration ci-contre — pour une simple lecture (tableur, "
-            "envoi à un tiers), l'export ci-dessous est plus adapté."
+            "Pour une simple lecture (tableur, envoi à un tiers) — ne sert pas à la restauration, "
+            "qui utilise le fichier .json ci-contre."
         )
         st.download_button(
             "⬇️ Exporter la Table de correspondance (.xlsx, tous les onglets)",
@@ -225,92 +228,92 @@ with tab_sauvegarde:
             use_container_width=True,
         )
 
-    with cs2:
-        st.markdown("**Restaurer une sauvegarde**")
-        # Clé variable (compteur en session_state, jamais réassigné directement à la
-        # main du widget - interdit par Streamlit) : after une restauration réussie,
-        # on l'incrémente pour forcer un uploader vierge plutôt que de laisser le
-        # fichier déjà traité, son récapitulatif et son bouton de confirmation
-        # trainer à l'écran comme s'il restait à cliquer.
-        _version_uploader = st.session_state.get("_version_uploader_restauration", 0)
-        fichier_restauration = st.file_uploader(
-            "Fichier de sauvegarde (.json)",
-            type=["json"],
-            key=f"uploader_restauration_referentiel_{_version_uploader}",
-        )
+    st.divider()
+    st.markdown("**Restaurer une sauvegarde**")
+    # Clé variable (compteur en session_state, jamais réassigné directement à la
+    # main du widget - interdit par Streamlit) : after une restauration réussie,
+    # on l'incrémente pour forcer un uploader vierge plutôt que de laisser le
+    # fichier déjà traité, son récapitulatif et son bouton de confirmation
+    # trainer à l'écran comme s'il restait à cliquer.
+    _version_uploader = st.session_state.get("_version_uploader_restauration", 0)
+    fichier_restauration = st.file_uploader(
+        "Fichier de sauvegarde (.json)",
+        type=["json"],
+        key=f"uploader_restauration_referentiel_{_version_uploader}",
+    )
 
-        if fichier_restauration is not None:
-            try:
-                contenu = json.loads(fichier_restauration.getvalue().decode("utf-8"))
-            except Exception:
-                st.error("❌ Fichier illisible : ce n'est pas un fichier JSON valide.")
-                contenu = None
+    if fichier_restauration is not None:
+        try:
+            contenu = json.loads(fichier_restauration.getvalue().decode("utf-8"))
+        except Exception:
+            st.error("❌ Fichier illisible : ce n'est pas un fichier JSON valide.")
+            contenu = None
 
-            if contenu is not None:
-                mappings_a_restaurer = contenu.get("mappings")
-                reglages_client_a_restaurer = contenu.get("reglages_client")
-                meta = contenu.get("_meta", {})
-                if not isinstance(mappings_a_restaurer, dict):
-                    st.error("❌ Fichier invalide : il ne s'agit pas d'une sauvegarde de référentiel reconnue.")
-                else:
-                    if meta.get("client_id") and meta.get("client_id") != client_id:
-                        st.warning(
-                            f"⚠️ Cette sauvegarde provient d'un autre client "
-                            f"(« {meta.get('client_nom', meta.get('client_id'))} »). "
-                            f"La restaurer remplacera quand même le référentiel et les réglages de « {client['nom']} »."
-                        )
-
-                    st.caption(
-                        f"Sauvegarde exportée le {meta.get('exporte_le', '?')}" +
-                        (f" pour « {meta['client_nom']} »" if meta.get("client_nom") else "") + "."
-                    )
-                    nom_a_restaurer = meta.get("client_nom", "").strip()
-                    renommage_prevu = bool(nom_a_restaurer) and nom_a_restaurer != client["nom"]
-                    recap = {
-                        "Points de vente": len(mappings_a_restaurer.get("points_de_vente", [])),
-                        "Comptes de vente": len(mappings_a_restaurer.get("comptes_de_vente", [])),
-                        "Départements": len(mappings_a_restaurer.get("departements", [])),
-                        "Codes analytiques": len(mappings_a_restaurer.get("codes_analytiques", [])),
-                        "Attribution analytique": len(mappings_a_restaurer.get("comptes_analytiques", [])),
-                        "Moyens de paiement": len(mappings_a_restaurer.get("comptes_paiement", [])),
-                        "Comptes de pourboires": len(mappings_a_restaurer.get("comptes_pourboires", [])),
-                        "Moyens de paiement ignorés": len(mappings_a_restaurer.get("modes_paiement_ignores", [])),
-                        "Taux de TVA": len(mappings_a_restaurer.get("comptes_tva", [])),
-                        "Paramètres généraux": "inclus (code journal, compte d'écart...)",
-                        "Config mail (tenant/boîte/identifiants Azure)": (
-                            "incluse" if isinstance(reglages_client_a_restaurer, dict)
-                            else "non incluse (sauvegarde d'une version antérieure) — laissée telle quelle"
-                        ),
-                        "Nom du client": (
-                            f"« {client['nom']} » → « {nom_a_restaurer} »" if renommage_prevu
-                            else f"inchangé (« {client['nom']} »)"
-                        ),
-                    }
-                    st.table(recap)
-
+        if contenu is not None:
+            mappings_a_restaurer = contenu.get("mappings")
+            reglages_client_a_restaurer = contenu.get("reglages_client")
+            meta = contenu.get("_meta", {})
+            if not isinstance(mappings_a_restaurer, dict):
+                st.error("❌ Fichier invalide : il ne s'agit pas d'une sauvegarde de référentiel reconnue.")
+            else:
+                if meta.get("client_id") and meta.get("client_id") != client_id:
                     st.warning(
-                        f"⚠️ La restauration **écrasera définitivement** le référentiel et les réglages actuels de "
-                        f"« {client['nom']} » avec le contenu de cette sauvegarde. Cette action est irréversible."
+                        f"⚠️ Cette sauvegarde provient d'un autre client "
+                        f"(« {meta.get('client_nom', meta.get('client_id'))} »). "
+                        f"La restaurer remplacera quand même le référentiel et les réglages de « {client['nom']} »."
                     )
-                    if st.button("✅ Confirmer la restauration", type="primary"):
-                        save_mappings(client_id, mappings_a_restaurer)
-                        if isinstance(reglages_client_a_restaurer, dict):
-                            set_email_config(
-                                client_id,
-                                reglages_client_a_restaurer.get("email_tenant_id", ""),
-                                reglages_client_a_restaurer.get("email_mailbox", ""),
-                            )
-                            set_azure_credentials(
-                                client_id,
-                                reglages_client_a_restaurer.get("azure_client_id", ""),
-                                reglages_client_a_restaurer.get("azure_client_secret", ""),
-                            )
-                            set_prefixe_mail(client_id, reglages_client_a_restaurer.get("prefixe_mail", ""))
-                        if renommage_prevu:
-                            rename_client(client_id, nom_a_restaurer)
-                        st.session_state["_restauration_reussie"] = True
-                        st.session_state["_version_uploader_restauration"] = _version_uploader + 1
-                        st.rerun()
+
+                st.caption(
+                    f"Sauvegarde exportée le {meta.get('exporte_le', '?')}" +
+                    (f" pour « {meta['client_nom']} »" if meta.get("client_nom") else "") + "."
+                )
+                nom_a_restaurer = meta.get("client_nom", "").strip()
+                renommage_prevu = bool(nom_a_restaurer) and nom_a_restaurer != client["nom"]
+                recap = {
+                    "Points de vente": len(mappings_a_restaurer.get("points_de_vente", [])),
+                    "Comptes de vente": len(mappings_a_restaurer.get("comptes_de_vente", [])),
+                    "Départements": len(mappings_a_restaurer.get("departements", [])),
+                    "Codes analytiques": len(mappings_a_restaurer.get("codes_analytiques", [])),
+                    "Attribution analytique": len(mappings_a_restaurer.get("comptes_analytiques", [])),
+                    "Moyens de paiement": len(mappings_a_restaurer.get("comptes_paiement", [])),
+                    "Comptes de pourboires": len(mappings_a_restaurer.get("comptes_pourboires", [])),
+                    "Moyens de paiement ignorés": len(mappings_a_restaurer.get("modes_paiement_ignores", [])),
+                    "Taux de TVA": len(mappings_a_restaurer.get("comptes_tva", [])),
+                    "Paramètres généraux": "inclus (code journal, compte d'écart...)",
+                    "Config mail (tenant/boîte/identifiants Azure)": (
+                        "incluse" if isinstance(reglages_client_a_restaurer, dict)
+                        else "non incluse (sauvegarde d'une version antérieure) — laissée telle quelle"
+                    ),
+                    "Nom du client": (
+                        f"« {client['nom']} » → « {nom_a_restaurer} »" if renommage_prevu
+                        else f"inchangé (« {client['nom']} »)"
+                    ),
+                }
+                st.table(recap)
+
+                st.warning(
+                    f"⚠️ La restauration **écrasera définitivement** le référentiel et les réglages actuels de "
+                    f"« {client['nom']} » avec le contenu de cette sauvegarde. Cette action est irréversible."
+                )
+                if st.button("✅ Confirmer la restauration", type="primary"):
+                    save_mappings(client_id, mappings_a_restaurer)
+                    if isinstance(reglages_client_a_restaurer, dict):
+                        set_email_config(
+                            client_id,
+                            reglages_client_a_restaurer.get("email_tenant_id", ""),
+                            reglages_client_a_restaurer.get("email_mailbox", ""),
+                        )
+                        set_azure_credentials(
+                            client_id,
+                            reglages_client_a_restaurer.get("azure_client_id", ""),
+                            reglages_client_a_restaurer.get("azure_client_secret", ""),
+                        )
+                        set_prefixe_mail(client_id, reglages_client_a_restaurer.get("prefixe_mail", ""))
+                    if renommage_prevu:
+                        rename_client(client_id, nom_a_restaurer)
+                    st.session_state["_restauration_reussie"] = True
+                    st.session_state["_version_uploader_restauration"] = _version_uploader + 1
+                    st.rerun()
 
 with tab_authentification:
     st.subheader("🔒 Authentification")
