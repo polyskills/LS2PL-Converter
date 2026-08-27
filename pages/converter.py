@@ -15,7 +15,6 @@ from __future__ import annotations
 import datetime as dt
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 from core.client_store import get_client
 from core.converter import convert
@@ -153,7 +152,7 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-components.html(
+st.iframe(
     r"""
     <script>
     const traductions = [
@@ -189,7 +188,7 @@ components.html(
     traduireTout();
     </script>
     """,
-    height=0,
+    height=1,
 )
 
 uploaded_files = st.file_uploader(

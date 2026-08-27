@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 from core.app_config import (
     get_footer_sidebar,
@@ -450,7 +449,7 @@ with tab_maj:
         # navigation personnalisée tant que la RACINE n'a pas été servie une première fois sur ce
         # process. Repasser par la racine avant toute sous-page évite le problème.
         if st.button("🔄 Rafraîchir la page"):
-            components.html(
+            st.iframe(
                 r"""
                 <script>
                 const s = window.parent.document.createElement('script');
@@ -458,7 +457,7 @@ with tab_maj:
                 window.parent.document.body.appendChild(s);
                 </script>
                 """,
-                height=0,
+                height=1,
             )
 
 with tab_infos:

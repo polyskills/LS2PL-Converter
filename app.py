@@ -10,7 +10,6 @@ appelé qu'ici, jamais dans les pages elles-mêmes.
 from __future__ import annotations
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 from core.app_config import is_auth_active, verifier_mot_de_passe
 from core.ui_common import render_client_selector, render_footer_sidebar
@@ -63,14 +62,16 @@ st.logo("assets/logo.png", size="large")
 # à jour). st.logo() n'expose que `link` (URL http(s) absolue, donc pas de "/" relatif
 # utilisable ici) et n'accepte pas d'onclick : on attache donc le clic en JS.
 #
-# components.html() s'exécute dans une iframe sandboxée sans allow-top-navigation :
-# toute navigation lancée directement depuis ce contexte est bloquée silencieusement
-# par le navigateur. Contournement (identique à celui du bouton de rafraîchissement) :
-# injecter un vrai <script> dans le document PARENT (document.createElement + append,
-# jamais innerHTML - les navigateurs n'exécutent pas les <script> posés par innerHTML)
-# pour que le code, y compris le futur gestionnaire de clic, s'exécute dans le
-# contexte non sandboxé du parent.
-components.html(
+# st.iframe() (remplace components.html(), dépréciée) s'exécute dans une iframe
+# sandboxée sans allow-top-navigation, à l'identique : toute navigation lancée
+# directement depuis ce contexte est bloquée silencieusement par le navigateur
+# (vérifié en conditions réelles - même attribut sandbox sur les deux). Contournement
+# (identique à celui du bouton de rafraîchissement) : injecter un vrai <script> dans
+# le document PARENT (document.createElement + append, jamais innerHTML - les
+# navigateurs n'exécutent pas les <script> posés par innerHTML) pour que le code, y
+# compris le futur gestionnaire de clic, s'exécute dans le contexte non sandboxé du
+# parent.
+st.iframe(
     r"""
     <script>
     const s = window.parent.document.createElement('script');
@@ -102,7 +103,7 @@ components.html(
     window.parent.document.body.appendChild(s);
     </script>
     """,
-    height=0,
+    height=1,
 )
 
 # st.logo() plafonne la hauteur de l'image (32px max, quel que soit `size`) : bien
@@ -240,7 +241,7 @@ pg.run()
 # l'onglet reste ouvert, contrairement à l'iframe du composant qui est
 # recréée à chaque rerun) évite de re-replier le groupe si l'utilisateur l'a
 # rouvert entre-temps.
-components.html(
+st.iframe(
     r"""
     <script>
     function replierDocumentationUneFois() {
@@ -261,7 +262,7 @@ components.html(
     replierDocumentationUneFois();
     </script>
     """,
-    height=0,
+    height=1,
 )
 
 # Pied de page du menu latéral, personnalisable page Réglages : appelé après
