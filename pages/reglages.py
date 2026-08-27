@@ -423,17 +423,21 @@ with tab_maj:
         # dans le document PARENT hors du sandbox de l'iframe) fonctionne, lui, de façon fiable :
         # vérifié aussi en conditions réelles, aucun nouvel onglet, reste sur le même onglet.
         #
-        # Cible : window.location.reload() plutôt que window.location.origin. Ce dernier ne
-        # renvoie QUE protocole+domaine+port, sans aucun chemin - sur un déploiement réel derrière
-        # un reverse proxy qui ajoute un préfixe de chemin (ex. /clients/...), ça retombait hors de
-        # l'app, obligeant à corriger l'URL à la main. reload() recharge la page ACTUELLEMENT
-        # affichée, quel que soit son chemin - toujours valide, aucune URL à reconstruire soi-même.
+        # Cible : window.location.origin (racine du site), PAS window.location.reload() ni une
+        # URL avec chemin. Hypothèse initiale erronée (un reverse proxy ajouterait un préfixe de
+        # chemin, perdu par origin) infirmée par un cas réel : sans aucun proxy, recharger une
+        # sous-page (ex. /reglages) juste après le redémarrage du process retombe sur la
+        # navigation automatique de Streamlit par nom de fichier brut plutôt que les titres/icônes
+        # personnalisés (même défaut que celui déjà corrigé sur l'écran d'authentification,
+        # cf. app.py) - Streamlit n'a pas encore eu l'occasion d'enregistrer sa configuration de
+        # navigation personnalisée tant que la RACINE n'a pas été servie une première fois sur ce
+        # process. Repasser par la racine avant toute sous-page évite le problème.
         if st.button("🔄 Rafraîchir la page"):
             components.html(
                 r"""
                 <script>
                 const s = window.parent.document.createElement('script');
-                s.textContent = "window.location.reload();";
+                s.textContent = "window.location.href = window.location.origin;";
                 window.parent.document.body.appendChild(s);
                 </script>
                 """,
