@@ -320,6 +320,11 @@ def test_mail_avec_adresse_inconnue_alerte_en_interne_et_notifie_le_client():
     assert "non identifié" in interne["subject"]
     client_notif = next(m for m in graph.sent if m["to_addresses"] == ["adresse-non-configuree@client.example.com"])
     assert "Échec" in client_notif["subject"]
+    # Fichier source joint même dans ce cas (adresse non identifiée, aucun client/PDV
+    # résolu) : le destinataire doit pouvoir comparer l'erreur au fichier concerné.
+    assert client_notif["attachments"] == [
+        ("mystere_business_export_accounting_20260810_20260811.xlsx", _build_sample_xlsx())
+    ]
     assert list_history(client["id"]) == []  # rien archivé : jamais entré dans le pipeline de conversion
 
 
@@ -386,6 +391,11 @@ def test_mail_avec_mapping_manquant_alerte_en_interne_et_le_client():
     assert "REST" in corps  # point de vente
     assert "Comptes de vente" in corps or "compte" in corps.lower()  # motif de l'échec repris
     assert "Historique" in corps  # invitation à s'y rendre pour corriger et relancer
+    # Fichier source joint : le destinataire doit pouvoir comparer directement l'erreur
+    # au fichier concerné, sans avoir à le retrouver ailleurs dans sa messagerie.
+    assert client_notif["attachments"] == [
+        ("client_rest_business_export_accounting_20260810_20260811.xlsx", _build_sample_xlsx())
+    ]
 
     historique = list_history(client["id"])
     assert len(historique) == 1

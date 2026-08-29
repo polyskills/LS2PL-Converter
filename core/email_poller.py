@@ -16,7 +16,9 @@ Clients), et pour chaque mail non lu avec pièce jointe dans cette boîte :
 4. archive la tentative dans l'historique du client, succès ou échec, avec
    le(s) destinataire(s) concerné(s) ;
 5. répond : succès -> fichiers + récapitulatif ; échec (fichier illisible,
-   mapping manquant...) -> le motif de l'échec, sans fichier joint ; dans les
+   mapping manquant...) -> le motif de l'échec, avec le fichier source
+   d'origine en pièce jointe (pour comparer facilement l'erreur au fichier
+   concerné, pas de CSV Pennylane vu qu'aucun n'a pu être généré) ; dans les
    deux cas à l'adresse « résultat » du point de vente si elle est
    configurée (Table de correspondance), sinon à l'adresse de réception
    d'origine — plus, en cas d'échec, une alerte interne avec le même détail ;
@@ -155,7 +157,7 @@ def _traiter_piece_jointe(
         _notifier_echec_client(
             graph, mailbox, adresses_candidates,
             sujet="Échec de traitement automatique de votre export LightSpeed",
-            filename=filename, detail=detail, prefixe_mail=prefixe_mail,
+            filename=filename, detail=detail, raw=raw, prefixe_mail=prefixe_mail,
         )
         return
 
@@ -181,7 +183,7 @@ def _traiter_piece_jointe(
         _notifier_echec_client(
             graph, mailbox, adresses_notification,
             sujet=f"Échec de traitement de votre export LightSpeed — {source.code_pdv}",
-            filename=filename, detail=detail, point_de_vente=source.code_pdv, periode=periode,
+            filename=filename, detail=detail, raw=raw, point_de_vente=source.code_pdv, periode=periode,
             prefixe_mail=prefixe_mail,
         )
         return
@@ -219,7 +221,7 @@ def _traiter_piece_jointe(
         _notifier_echec_client(
             graph, mailbox, adresses_notification,
             sujet=f"Échec de conversion de votre export LightSpeed — {source.code_pdv}",
-            filename=filename, detail=detail, point_de_vente=source.code_pdv, periode=periode,
+            filename=filename, detail=detail, raw=raw, point_de_vente=source.code_pdv, periode=periode,
             prefixe_mail=prefixe_mail,
         )
 
@@ -316,17 +318,20 @@ def _corps_notification_echec(
 
 def _notifier_echec_client(
     graph, mailbox, destinataires: list[str], sujet: str, filename: str, detail: str,
-    point_de_vente: str | None = None, periode: str | None = None, prefixe_mail: str = "LS2PL",
+    raw: bytes | None = None, point_de_vente: str | None = None, periode: str | None = None,
+    prefixe_mail: str = "LS2PL",
 ) -> None:
     """Notifie, en plus de l'alerte interne (_alerter), le(s) destinataire(s)
     côté client concerné(s) par un échec — y compris quand l'adresse
     destinataire elle-même n'est pas reconnue (ex. une entrée modifiée par
     erreur dans la Table de correspondance) : sans ça, seule Polyskills le
     saurait, à condition d'avoir configuré LSPENNYLANE_ALERTE_INTERNE, sans
-    jamais remonter jusqu'à qui pourrait corriger le référentiel. Aucun
-    fichier joint ici (contrairement à _envoyer_resultat) : uniquement le
-    motif de l'échec, en clair, et une invitation à corriger puis relancer
-    manuellement (cf. _corps_notification_echec)."""
+    jamais remonter jusqu'à qui pourrait corriger le référentiel. Le fichier
+    source d'origine est joint (raw, si connu) pour que le destinataire
+    puisse comparer directement le motif de l'échec au fichier concerné,
+    sans avoir à le retrouver dans sa messagerie — jamais de CSV Pennylane
+    ici (contrairement à _envoyer_resultat), vu qu'aucun n'a pu être
+    généré."""
     destinataires = [a for a in dict.fromkeys(destinataires) if a]  # dédoublonne, préserve l'ordre
     if not destinataires:
         return
@@ -335,6 +340,7 @@ def _notifier_echec_client(
         subject=f"[{prefixe_mail}] {sujet}",
         body_html=_corps_notification_echec(filename, detail, point_de_vente, periode),
         to_addresses=destinataires,
+        attachments=[(filename, raw)] if raw is not None else None,
     )
 
 
