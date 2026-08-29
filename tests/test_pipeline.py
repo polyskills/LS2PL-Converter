@@ -11,10 +11,11 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import pytest
 from openpyxl import Workbook
 
 from core.converter import convert
-from core.lightspeed_parser import parse_lightspeed_export
+from core.lightspeed_parser import LightspeedParseError, parse_lightspeed_export
 from core.mapping_store import DEFAULT_MAPPINGS
 
 
@@ -48,6 +49,84 @@ def _build_sample_xlsx() -> bytes:
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+def _build_sample_xlsx_sans_ventes() -> bytes:
+    """Reproduit un cas réel rapporté : export d'une journée sans AUCUNE vente
+    (fermeture...). LightSpeed ne génère alors aucune paire de colonnes
+    "Montant taxé / TVA X%" dans l'en-tête (une par taux ayant eu de l'activité
+    ce jour-là - zéro activité, zéro colonne) et aucune ligne de catégorie,
+    directement suivi de "Total EUR" ; le bloc « Modes de paiement » est réduit
+    à ses trois lignes de total, toutes à 0, sans "Total des paiements" ni
+    aucune ligne de mode de paiement individuel."""
+    wb = Workbook()
+    ws = wb.active
+    rows = [
+        ["Références comptables", "Quantité", "Total", "Rabais", "Total TTC Moins les rabais",
+         "Total taxes", "%", "Total HT"],
+        ["Total EUR", None, None, None, None, None, 100, None],
+        [None] * 8,
+        ["Modes de paiement", "Montant (Moins retour)"] + [None] * 6,
+        ["Total EUR", 0] + [None] * 6,
+        ["Total taxes EUR", 0] + [None] * 6,
+        ["Total EUR (Moins les taxes)", 0] + [None] * 6,
+    ]
+    for row in rows:
+        ws.append(row)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def test_parse_journee_sans_vente_ne_leve_pas_d_erreur():
+    # Cas rapporté : ce fichier levait "aucune colonne de taux de TVA détectée"
+    # (LightspeedParseError) alors qu'il s'agit d'une journée sans aucune vente,
+    # pas d'une anomalie de format - un cas normal (fermeture...) ne doit jamais
+    # être présenté comme une erreur.
+    export = parse_lightspeed_export(_build_sample_xlsx_sans_ventes(), "sans_ventes.xlsx")
+    assert export.categories == []
+    assert export.paiements == []
+    assert export.ca_ht == 0
+    assert export.tva_totale == 0
+
+
+def test_convert_journee_sans_vente_reussit_sans_erreur_ni_avertissement():
+    export = parse_lightspeed_export(_build_sample_xlsx_sans_ventes(), "sans_ventes.xlsx")
+    res = convert(export, DEFAULT_MAPPINGS, point_de_vente="REST", date_piece="28/08/26", numero_piece="LS-TEST")
+    assert res.sans_erreur, res.erreurs
+    assert not res.avertissements
+    assert res.lignes == []
+    assert res.ca_ht_source == res.ca_ht_genere == 0
+    assert res.total_debit == res.total_credit == 0
+
+
+def test_parse_leve_toujours_erreur_si_colonne_tva_manquante_avec_de_vraies_ventes():
+    # Garde-fou pour l'assouplissement ci-dessus : une vraie anomalie de format
+    # (colonnes de taux de TVA absentes alors qu'il y a des lignes de vente à
+    # lire) doit continuer à bloquer plutôt que d'être silencieusement avalée
+    # comme "journée sans vente".
+    wb = Workbook()
+    ws = wb.active
+    rows = [
+        ["Références comptables", "Quantité", "Total", "Rabais", "Total TTC Moins les rabais",
+         "Total taxes", "%", "Total HT"],
+        ["Cuisine - Plat", 8, 94.6, None, 94.6, 8.6, 36, 86],
+        ["Total EUR", 8, 94.6, None, 94.6, 8.6, 100, 86],
+        [None] * 8,
+        ["Modes de paiement", "Montant (Moins retour)"] + [None] * 6,
+        ["Carte bleue", 94.6] + [None] * 6,
+        ["Total des paiements", 94.6] + [None] * 6,
+        ["Total EUR", 94.6] + [None] * 6,
+        ["Total taxes EUR", 8.6] + [None] * 6,
+        ["Total EUR (Moins les taxes)", 86] + [None] * 6,
+    ]
+    for row in rows:
+        ws.append(row)
+    buf = io.BytesIO()
+    wb.save(buf)
+
+    with pytest.raises(LightspeedParseError, match="aucune colonne de taux de TVA"):
+        parse_lightspeed_export(buf.getvalue(), "anomalie.xlsx")
 
 
 def test_parse_categories_and_totals():

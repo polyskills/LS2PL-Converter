@@ -210,9 +210,12 @@ _FIXED_HEADER_LABELS = {
 _TVA_HEADER_RE = re.compile(r"^TVA\s*([\d]+(?:[.,]\d+)?)\s*%$", re.IGNORECASE)
 
 
-def _locate_ventes_columns(header_row: list[str], filename: str) -> dict:
+def _locate_ventes_columns(header_row: list[str], filename: str, exiger_colonne_tva: bool = True) -> dict:
     """Retrouve, par intitulé, la position de chaque colonne utile du bloc ventes,
-    y compris un nombre variable de paires (Montant taxé / TVA X%)."""
+    y compris un nombre variable de paires (Montant taxé / TVA X%).
+
+    exiger_colonne_tva=False : ne lève pas d'erreur si aucune paire n'est trouvée
+    (journée sans aucune ligne de vente à lire - cf. l'appelant, parse_lightspeed_export)."""
 
     def find_exact(label: str) -> int:
         for i, v in enumerate(header_row):
@@ -243,7 +246,7 @@ def _locate_ventes_columns(header_row: list[str], filename: str) -> dict:
                 )
             tva_pairs.append({"taux": taux, "base_idx": base_idx, "tva_idx": i})
 
-    if not tva_pairs:
+    if not tva_pairs and exiger_colonne_tva:
         raise LightspeedParseError(
             f"« {filename} » : aucune colonne de taux de TVA (« TVA X% ») détectée dans l'en-tête "
             f"du tableau des ventes ({header_row})."
@@ -321,7 +324,6 @@ def parse_lightspeed_export(file_bytes: bytes, filename: str) -> LightspeedExpor
         )
     header_idx = header_idx_candidates[0]
     header_row = [_norm(v) for v in df.iloc[header_idx].tolist()]
-    cols = _locate_ventes_columns(header_row, filename)
 
     total_idx_candidates = col0[(col0 == "Total EUR") & (col0.index > header_idx)].index
     if len(total_idx_candidates) == 0:
@@ -329,6 +331,15 @@ def parse_lightspeed_export(file_bytes: bytes, filename: str) -> LightspeedExpor
             f"« {filename} » : fin du tableau des ventes ('Total EUR') introuvable."
         )
     bloc1_total_idx = total_idx_candidates[0]
+
+    # Journée sans aucune vente : LightSpeed ne génère alors AUCUNE paire de colonnes
+    # "Montant taxé / TVA X%" dans l'en-tête (une par taux ayant eu de l'activité ce
+    # jour-là - zéro activité, zéro colonne), directement suivi de la ligne "Total EUR"
+    # sans aucune ligne de catégorie entre les deux. Cas normal (jour sans exploitation,
+    # fermeture...), pas une anomalie de format : l'absence de colonne de taux de TVA
+    # n'est exigée que s'il y a effectivement des lignes de vente à lire.
+    sans_ligne_de_vente = bloc1_total_idx == header_idx + 1
+    cols = _locate_ventes_columns(header_row, filename, exiger_colonne_tva=not sans_ligne_de_vente)
 
     categories: list[CategorieVente] = []
     for i in range(header_idx + 1, bloc1_total_idx):
