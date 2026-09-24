@@ -373,7 +373,9 @@ def _consolider_paire(graph, mailbox: str, source, pdv: dict | None, etat: dict,
         )
 
     try:
-        res = construire_synthese(paire[0], paire[1], site)
+        res = construire_synthese(
+            paire[0], paire[1], site, periode=(etat.get("date_debut"), etat.get("date_fin"))
+        )
     except SyntheseError as exc:
         return echouer(f"{exc}", "Échec de consolidation")
 
@@ -388,6 +390,12 @@ def _consolider_paire(graph, mailbox: str, source, pdv: dict | None, etat: dict,
 def _envoyer_resultat_consolidation(
     graph, mailbox, adresses: list[str], source, res, sources: list, prefixe_mail: str,
 ) -> None:
+    sans_vente = (
+        "<p><b>Aucune vente sur cette période</b> — le rapport Tickets est vide : journée sans "
+        "activité (fermeture, jour férié...). Les totaux sont à zéro, ce n'est pas une erreur de "
+        "traitement. Si la journée aurait dû être ouverte, c'est l'export LightSpeed qu'il faut "
+        "vérifier.</p>"
+    ) if res.sans_vente else ""
     alerte = "" if res.sans_anomalie_bloquante else (
         f"<p>❌ Écart de {res.ecart_controle:+.2f} € entre le total des transactions et celui des "
         "tickets : les deux rapports ne couvrent probablement pas exactement la même période. "
@@ -403,6 +411,7 @@ def _envoyer_resultat_consolidation(
         f"<li>Couverts : {res.couverts}</li>"
         f"<li>{res.nb_tickets} tickets, {res.nb_lignes} lignes de transaction</li>"
         f"</ul>"
+        + sans_vente
         + alerte
         + (f"<p>⚠️ {len(a_verifier)} point(s) à vérifier — voir l'onglet ANOMALIES du classeur.</p>" if a_verifier else "")
         + _pied_de_page_lien_app()
@@ -410,7 +419,8 @@ def _envoyer_resultat_consolidation(
     jour = res.jours[0].strftime("%Y%m%d") if res.jours else "sansdate"
     graph.send_mail(
         mailbox,
-        subject=f"[{prefixe_mail}] Consolidation - {source.client_id.upper()}/{source.code_pdv} - {res.periode_libelle}",
+        subject=f"[{prefixe_mail}] Consolidation - {source.client_id.upper()}/{source.code_pdv} - "
+                f"{res.periode_libelle}" + (" - sans vente" if res.sans_vente else ""),
         body_html=corps,
         to_addresses=adresses,
         attachments=[(nom, contenu) for nom, contenu in sources]

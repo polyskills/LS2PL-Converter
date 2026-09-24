@@ -316,3 +316,69 @@ def test_journee_sans_rattachement_ni_groupe_inconnu_na_rien_a_verifier():
     res = construire_synthese(*_exports(tickets, transactions), "BAR")
     assert res.anomalies_a_verifier == []
     assert res.sans_anomalie_bloquante
+
+
+# --- Journée sans vente ----------------------------------------------------
+#
+# Cas réel : restaurant fermé. LightSpeed produit quand même ses deux
+# rapports, vides. La consolidation le refusait, et cinq journées sont restées
+# bloquées douze jours. Même décision que pour la conversion comptable, où une
+# journée sans vente a cessé d'être une erreur.
+
+
+def _exports_vides(periode="20260912_20260913"):
+    return (
+        [(f"cli_bar_tickets_{periode}.xlsx", _classeur(COLS_TICKETS, []))],
+        [(f"cli_bar_transactions_{periode}.xlsx", _classeur(COLS_TRANSACTIONS, []))],
+    )
+
+
+def test_journee_sans_vente_produit_un_classeur_a_zero():
+    tickets, transactions = _exports_vides()
+    res = construire_synthese(tickets, transactions, "BAR", periode=("12/09/26", "13/09/26"))
+
+    assert res.sans_vente
+    assert res.ca_ttc == 0.0 and res.ca_ht == 0.0 and res.couverts == 0
+    assert res.nb_tickets == 0 and res.nb_lignes == 0
+    assert res.sans_anomalie_bloquante          # rien de cassé : c'est une journée fermée
+    assert res.anomalies_a_verifier == []       # ni erreur, ni point à vérifier
+    wb = openpyxl.load_workbook(io.BytesIO(res.classeur))
+    assert wb.sheetnames[0] == "SYNTHESE"
+
+
+def test_journee_sans_vente_datee_depuis_le_nom_de_fichier():
+    # Le contenu ne peut plus dire de quelle journée il s'agit : la période
+    # vient du nom de l'export.
+    tickets, transactions = _exports_vides()
+    res = construire_synthese(tickets, transactions, "BAR", periode=("12/09/26", "13/09/26"))
+    assert res.periode_libelle == "12/09/2026"
+    entete = openpyxl.load_workbook(io.BytesIO(res.classeur))["SYNTHESE"]["A1"].value
+    assert "12/09/2026" in entete
+
+
+def test_journee_sans_vente_est_signalee_explicitement():
+    # Jamais silencieuse : la ligne doit figurer dans le classeur pour qu'on
+    # sache, en relisant, que la journée était vide et non ratée.
+    tickets, transactions = _exports_vides()
+    res = construire_synthese(tickets, transactions, "BAR", periode=("12/09/26", "13/09/26"))
+    libelles = [a[0] for a in res.anomalies]
+    assert "Aucune vente sur la période" in libelles
+    detail = next(a[2] for a in res.anomalies if a[0] == "Aucune vente sur la période")
+    assert "export LightSpeed qu'il faut vérifier" in detail
+
+    anomalies_feuille = list(openpyxl.load_workbook(io.BytesIO(res.classeur))["ANOMALIES"]
+                             .iter_rows(values_only=True))
+    assert any(r[0] == "Aucune vente sur la période" for r in anomalies_feuille)
+
+
+def test_journee_sans_vente_sans_periode_ne_plante_pas():
+    # Nom de fichier sans période lisible : on préfère un classeur daté du jour
+    # à un plantage ou à un refus de traiter.
+    tickets, transactions = _exports_vides()
+    res = construire_synthese(tickets, transactions, "BAR")
+    assert res.sans_vente and res.jours and res.classeur
+
+
+def test_une_journee_avec_ventes_nest_pas_marquee_sans_vente():
+    res = construire_synthese(*_exports(), "BAR")
+    assert not res.sans_vente

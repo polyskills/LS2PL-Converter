@@ -33,6 +33,7 @@ from __future__ import annotations
 import csv
 import io
 import re
+import datetime as dt
 from dataclasses import dataclass, field
 
 import pandas as pd
@@ -99,6 +100,7 @@ FONT = "Montserrat"
 # L'ancien libellé est conservé pour que les consolidations déjà archivées
 # s'affichent de la même façon que les nouvelles.
 LIBELLES_INFORMATIFS = (
+    "Aucune vente sur la période",
     "Écart total transactions",
     "Tickets rattachés à leur période d'ouverture",
     "Tickets dont la période (ouverture) diffère du profil Lightspeed",
@@ -155,6 +157,14 @@ class SyntheseResult:
             if libelle.startswith("Écart total transactions"):
                 return float(valeur)
         return 0.0
+
+    @property
+    def sans_vente(self) -> bool:
+        """Journée sans aucune vente (fermeture...). Cas normal, pas une
+        anomalie de format : LightSpeed produit quand même ses rapports, vides.
+        Signalé partout où le résultat est présenté, pour que la journée ne
+        passe jamais inaperçue — sans faire échouer la consolidation."""
+        return self.nb_tickets == 0
 
     @property
     def anomalies_a_verifier(self) -> list:
@@ -348,6 +358,14 @@ def charger(tickets: list[tuple[str, bytes]], transactions: list[tuple[str, byte
 
 def anomalies(t, x, m, periodes) -> list[tuple]:
     a = []
+    if t.empty:
+        a.append((
+            "Aucune vente sur la période", 0,
+            "Le rapport Tickets ne contient aucune ligne : journée sans activité "
+            "(fermeture, jour férié...). Tous les totaux sont à zéro. Ce n'est pas "
+            "une anomalie de format — mais si la journée aurait dû être ouverte, "
+            "c'est l'export LightSpeed qu'il faut vérifier.",
+        ))
     orphelins = m[m["ProfilTicket"].isna()]
     if len(orphelins):
         a.append(("Lignes de transaction sans ticket", len(orphelins),
@@ -386,7 +404,17 @@ def styliser_entete(ws, row, c1, c2):
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
 
-def ecrire(t, x, m, periodes, titre_site: str) -> bytes:
+def _jour_depuis_ddmmaa(valeur: str | None):
+    """Convertit une date "dd/mm/aa" (format des noms d'export, cf.
+    core.email_ingest) en date. None si elle n'est pas exploitable."""
+    try:
+        j, mo, an = str(valeur).split("/")
+        return dt.date(2000 + int(an), int(mo), int(j))
+    except (AttributeError, ValueError):
+        return None
+
+
+def ecrire(t, x, m, periodes, titre_site: str, jours=None) -> bytes:
     """Construit le classeur et le renvoie en octets : aucune écriture disque,
     l'app le propose au téléchargement et l'archive elle-même."""
     wb = Workbook()
@@ -426,7 +454,11 @@ def ecrire(t, x, m, periodes, titre_site: str) -> bytes:
 
     # ---------- SYNTHESE : mise en forme du modèle DAF ----------
     ws = wb.create_sheet("SYNTHESE", 0)
-    jours = sorted(set(t["Jour"]))
+    # Fournis par l'appelant : une journée sans aucune vente n'en contient
+    # aucun, et le classeur doit tout de même savoir de quelle période il
+    # parle — elle vient alors du nom de fichier.
+    if jours is None:
+        jours = sorted(set(t["Jour"]))
     D, T = "DONNEES", "TICKETS"
     FN = "Aptos Narrow"
     med, thin = Side(style="medium"), Side(style="thin")
@@ -630,11 +662,21 @@ def construire_synthese(
     tickets: list[tuple[str, bytes]],
     transactions: list[tuple[str, bytes]],
     site: str,
+    periode: tuple[str | None, str | None] | None = None,
 ) -> SyntheseResult:
     """Point d'entrée unique de la consolidation : deux jeux d'exports en
     octets (nom, contenu) et un site, un classeur en octets et de quoi le
     présenter. Plusieurs fichiers par rapport sont acceptés pour couvrir une
-    période plus longue qu'une journée (dédoublonnage par identifiant)."""
+    période plus longue qu'une journée (dédoublonnage par identifiant).
+
+    `periode` : (date de début, date de fin) au format "dd/mm/aa", telles que
+    lues dans le nom des exports (cf. core.email_ingest.extraire_periode).
+    Servent uniquement quand les rapports ne contiennent AUCUNE vente : le
+    classeur doit alors savoir de quelle journée il parle, et le contenu ne
+    peut plus le lui dire. Une journée sans vente est un cas normal - le
+    restaurant était fermé - et produit un classeur à zéro, signalé comme tel,
+    plutôt qu'un échec : même décision que pour la conversion comptable, où
+    une journée sans vente a cessé d'être une erreur."""
     conf = SITES.get(str(site).upper())
     if conf is None:
         raise SyntheseError(
@@ -642,12 +684,16 @@ def construire_synthese(
         )
     periodes = conf["periodes"]
     t, x, m = charger(tickets, transactions, periodes)
-    if t.empty:
-        raise SyntheseError("Le rapport Tickets ne contient aucune ligne : rien à consolider.")
 
     res = SyntheseResult(site=str(site).upper())
     res.fichiers_sources = [nom for nom, _ in tickets] + [nom for nom, _ in transactions]
     res.jours = sorted(set(t["Jour"]))
+    if not res.jours:
+        # Aucune vente : la période vient du nom de fichier. À défaut, le
+        # classeur serait sans date - on préfère un repli sur le jour même à
+        # un plantage ou à un refus de traiter.
+        debut = _jour_depuis_ddmmaa((periode or (None, None))[0])
+        res.jours = [debut or dt.date.today()]
     res.nb_tickets = len(t)
     res.nb_lignes = len(m)
     # Mêmes colonnes que celles totalisées par la feuille SYNTHESE (DONNEES!I
@@ -657,5 +703,5 @@ def construire_synthese(
     res.ca_ht = round(float(m["PreTax"].sum()), 2)
     res.couverts = int(t["Couverts"].sum())
     res.anomalies = anomalies(t, x, m, periodes)
-    res.classeur = ecrire(t, x, m, periodes, conf["titre"])
+    res.classeur = ecrire(t, x, m, periodes, conf["titre"], res.jours)
     return res

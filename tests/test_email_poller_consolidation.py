@@ -340,3 +340,27 @@ def test_une_paire_en_echec_ne_bloque_pas_les_autres_traitements():
     # Les deux ont abouti : la nouvelle, et l'ancienne reprise au passage.
     assert len(list_consolidations(client["id"])) == 2
     assert consolidation_sas.lister(client["id"]) == []
+
+
+def test_une_journee_de_fermeture_recue_par_mail_aboutit():
+    # Cas réel : cinq journées de fermeture bloquées dans le sas. Les deux
+    # rapports arrivent vides, la consolidation doit aboutir et le mail le dire.
+    from tests.test_synthese import _classeur
+    client = _client_avec_consolidation()
+    vides = (
+        ("cli_bar_tickets_20260912_20260913.xlsx", _classeur(COLS_TICKETS, [])),
+        ("cli_bar_transactions_20260912_20260913.xlsx", _classeur(COLS_TRANSACTIONS, [])),
+    )
+    graph = FakeGraph()
+    graph.messages = [_message("m1", vides[0]), _message("m2", vides[1])]
+    traiter_client(graph, client)
+
+    entrees = list_consolidations(client["id"])
+    assert len(entrees) == 1
+    assert entrees[0]["statut"] == "OK"          # une fermeture n'est pas un échec
+    assert entrees[0]["ca_ttc"] == 0.0
+    assert consolidation_sas.lister(client["id"]) == []   # plus rien en attente
+
+    envoye = next(m for m in graph.sent if "Consolidation" in m["subject"])
+    assert "sans vente" in envoye["subject"]      # repérable d'un coup d'œil dans la boîte
+    assert "Aucune vente sur cette période" in envoye["body_html"]

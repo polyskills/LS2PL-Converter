@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from core.email_ingest import extraire_periode
 from core.history_store import record_consolidation
 from core.lightspeed_synthese import (
     SITES,
@@ -29,6 +30,7 @@ from core.lightspeed_synthese import (
 from core.timezone import now_local
 from core.consolidation_sas import (
     DELAI_ALERTE_HEURES,
+    chemin_rapport,
     est_complet,
     lister as lister_en_attente,
     rapport_manquant,
@@ -92,6 +94,23 @@ def _depose_le(etat: dict) -> str:
     return min((r.get("horodatage", "") for r in etat.get("rapports", {}).values()), default="")
 
 
+def _boutons_telechargement(conteneur, client_id: str, etat: dict) -> None:
+    """Rapports conservés dans le sas, téléchargeables. Sans ça, on ne peut
+    pas ouvrir le fichier qui bloque pour comprendre ce qu'il contient — il
+    faut retourner le chercher dans la messagerie."""
+    for type_rapport, infos in sorted(etat.get("rapports", {}).items()):
+        chemin = chemin_rapport(client_id, etat["cle"], infos)
+        if not chemin:
+            continue
+        with open(chemin, "rb") as f:
+            conteneur.download_button(
+                f"⬇️ {type_rapport}",
+                data=f.read(),
+                file_name=infos.get("nom_fichier") or f"{type_rapport}.xls",
+                key=f"dl_{etat['cle']}_{type_rapport}",
+            )
+
+
 if attente_binome:
     with st.expander(f"⏳ {len(attente_binome)} rapport(s) en attente de leur binôme", expanded=False):
         st.caption(
@@ -112,6 +131,13 @@ if attente_binome:
             use_container_width=True,
             hide_index=True,
         )
+        st.caption("Rapports reçus, téléchargeables pour vérification :")
+        for e in attente_binome:
+            cd1, cd2 = st.columns([3, 2])
+            cd1.markdown(
+                f"**{e.get('code_pdv', '')}** — {e.get('date_debut') or '?'} → {e.get('date_fin') or '?'}"
+            )
+            _boutons_telechargement(cd2, client_id, e)
 
 if en_echec:
     with st.expander(f"❌ {len(en_echec)} paire(s) complète(s) dont la consolidation a échoué", expanded=True):
@@ -125,11 +151,12 @@ if en_echec:
         for e in en_echec:
             periode = f"{e.get('date_debut') or '?'} → {e.get('date_fin') or '?'}"
             motif = (e.get("derniere_erreur") or {}).get("motif")
-            c1, c2 = st.columns([5, 1])
+            c1, c2, c3 = st.columns([4, 1, 1])
             c1.markdown(f"**{e.get('code_pdv', '')}** — {periode}  ·  reçue le {_depose_le(e)}")
             if motif:
                 c1.caption(f"Dernier motif : {motif}")
-            if c2.button("🔄 Relancer", key=f"relancer_{e['cle']}"):
+            _boutons_telechargement(c2, client_id, e)
+            if c3.button("🔄 Relancer", key=f"relancer_{e['cle']}"):
                 with st.spinner("Nouvelle tentative..."):
                     reussies = _relancer_paires(client_id)
                 if reussies:
@@ -214,7 +241,10 @@ if st.button("🔄 Lancer la consolidation", type="primary", disabled=not pret):
     tickets = [(n, par_nom[n].getvalue()) for n in choix_tickets]
     transactions = [(n, par_nom[n].getvalue()) for n in choix_transactions]
     try:
-        res = construire_synthese(tickets, transactions, site)
+        # La période vient du nom de fichier : elle ne sert que si les
+        # rapports sont vides (journée sans vente), le classeur devant tout de
+        # même savoir de quelle journée il parle.
+        res = construire_synthese(tickets, transactions, site, periode=extraire_periode(tickets[0][0]))
     except SyntheseError as e:
         st.error(f"❌ {e}")
         st.stop()
@@ -239,6 +269,14 @@ m4.metric(
     "Équilibré ✅" if res.sans_anomalie_bloquante else f"Écart {res.ecart_controle:+.2f} €",
     delta_color="off",
 )
+
+if res.sans_vente:
+    st.info(
+        "ℹ️ **Aucune vente sur cette période** — le rapport Tickets est vide : journée sans "
+        "activité (fermeture, jour férié...). Le classeur est produit avec des totaux à zéro, "
+        "ce n'est pas une erreur de traitement. Si la journée aurait dû être ouverte, c'est "
+        "l'export LightSpeed qu'il faut vérifier."
+    )
 
 if res.sans_anomalie_bloquante:
     st.success(

@@ -77,6 +77,20 @@ entièrement séparé de celui des conversions comptables
 chacun a son journal, son plafond de conservation et sa purge. Aucun des deux
 traitements ne peut faire perdre les données de l'autre.
 
+## Une journée sans vente
+
+Un jour de fermeture, LightSpeed produit quand même ses deux rapports, **vides**.
+Ce n'est pas une anomalie : la consolidation aboutit, avec des totaux à zéro, et
+la journée est signalée explicitement — ligne « Aucune vente sur la période »
+dans l'onglet `ANOMALIES`, mention dans le mail de résultat (dont l'objet se
+termine par « sans vente ») et bandeau à l'écran.
+
+La période vient alors du **nom du fichier**, le contenu ne pouvant plus dire de
+quelle journée il s'agit.
+
+Si une journée signalée ainsi aurait dû être ouverte, le problème est en amont :
+c'est l'export LightSpeed qu'il faut vérifier, pas la consolidation.
+
 ## Le contrôle qui compte
 
 L'écart entre le total des lignes de transaction et le total des tickets doit
