@@ -81,6 +81,13 @@ et son message est marqué lu comme d'habitude. La consolidation se déclenche
   point de vente : il fixe les périodes de service. S'il manque, la paire
   **reste dans le sas** et un échec est signalé — jamais de perte, jamais de
   repli silencieux sur un site deviné.
+- **Une paire complète en échec est retentée à chaque cycle.** La cause se
+  corrige presque toujours dans la Table de correspondance, jamais dans le
+  sas : dès qu'elle l'est, la consolidation repart seule, sans qu'un nouveau
+  rapport ait à arriver. Le motif du dernier échec est mémorisé et la
+  notification n'est envoyée qu'à son changement, pour ne pas répéter le même
+  message à chaque passage. La page Consolidation liste ces paires et offre un
+  bouton « Relancer » pour ne pas attendre le cycle suivant.
 
 L'attente est visible page Consolidation, dans le panneau « rapports reçus par
 mail, en attente de leur binôme ».

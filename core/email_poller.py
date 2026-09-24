@@ -46,13 +46,15 @@ from core.consolidation_sas import (
     cle_appariement,
     deposer,
     est_complet,
+    marquer_echec,
     marquer_signale,
+    paires_en_echec,
     orphelins_a_signaler,
     purger_expires,
     rapport_manquant,
     retirer,
 )
-from core.email_ingest import EmailIngestError, date_aaaammjj, identifier_source
+from core.email_ingest import EmailIngestError, SourceIdentifiee, date_aaaammjj, identifier_source
 from core.history_store import record_consolidation, record_conversion
 from core.lightspeed_parser import LightspeedParseError, parse_lightspeed_export
 from core.lightspeed_synthese import SITES, SyntheseError, classer_fichiers, construire_synthese
@@ -111,7 +113,11 @@ def traiter_client(graph, client: dict) -> int:
     for message in graph.list_unread_with_attachments(mailbox):
         if traiter_message(graph, mailbox, message, prefixe_mail):
             nb_recuperes += 1
-    # Après le traitement des messages, et pas avant : un rapport attendu
+    # Reprise AVANT le signalement : une paire en échec peut aboutir maintenant
+    # (référentiel corrigé entre deux cycles), inutile de la compter parmi les
+    # incidents si elle vient de repartir.
+    reprendre_paires_en_echec(graph, mailbox, client["id"], prefixe_mail)
+    # Et après le traitement des messages, pas avant : un rapport attendu
     # depuis 4 h peut très bien être complété par le cycle en cours.
     signaler_orphelins(graph, mailbox, client["id"])
     return nb_recuperes
@@ -314,11 +320,20 @@ def _traiter_rapport_consolidation(
 
 
 def _consolider_paire(graph, mailbox: str, source, pdv: dict | None, etat: dict,
-                      periode: str, prefixe_mail: str) -> None:
-    """Paire complète : consolide, archive, envoie. En cas d'échec, la paire
-    RESTE dans le sas — les fichiers sont la seule copie disponible côté
-    application, et un site mal renseigné se corrige puis se rejoue à la main
-    plutôt que de tout perdre."""
+                      periode: str, prefixe_mail: str) -> bool:
+    """Paire complète : consolide, archive, envoie. Renvoie True en cas de
+    succès (la paire est alors retirée du sas), False sinon.
+
+    En cas d'échec la paire RESTE dans le sas — les fichiers y sont la seule
+    copie disponible côté application. Elle est retentée à chaque cycle, la
+    cause étant presque toujours à corriger dans le référentiel (cf.
+    reprendre_paires_en_echec) ; le motif est mémorisé pour ne notifier qu'une
+    fois par cause.
+
+    `graph` peut être None : la consolidation est alors calculée et archivée
+    sans aucun envoi de mail. C'est ce que fait la relance manuelle depuis la
+    page Consolidation, où l'utilisateur voit le résultat à l'écran et où le
+    client n'a pas forcément de boîte configurée."""
     cle = etat["cle"]
     # Destinataires des deux messages confondus : ils sont normalement
     # identiques, mais si l'adresse résultat a changé entre les deux, mieux
@@ -328,6 +343,18 @@ def _consolider_paire(graph, mailbox: str, source, pdv: dict | None, etat: dict,
     ))
     noms = ", ".join(r["nom_fichier"] for r in etat["rapports"].values())
 
+    def echouer(detail: str, sujet: str) -> bool:
+        nouveau = marquer_echec(source.client_id, cle, detail, now_local().strftime("%Y-%m-%d %H:%M:%S"))
+        # Même motif qu'au passage précédent : déjà signalé, on ne répète pas.
+        if graph is not None and nouveau:
+            _alerter(graph, mailbox, sujet=f"{sujet} — {source.code_pdv} {periode}", detail=detail)
+            _notifier_echec_client(
+                graph, mailbox, adresses, sujet="Échec de consolidation de vos rapports Lightspeed",
+                filename=noms, detail=detail, point_de_vente=source.code_pdv, periode=periode,
+                prefixe_mail=prefixe_mail,
+            )
+        return False
+
     site = ((pdv or {}).get("site_consolidation") or "").strip().upper()
     if site not in SITES:
         detail = (
@@ -336,38 +363,26 @@ def _consolider_paire(graph, mailbox: str, source, pdv: dict | None, etat: dict,
             "ne peut pas être calculée sans lui — à compléter dans la Table de correspondance, "
             "onglet Points de vente, puis relancer la consolidation manuellement."
         )
-        _alerter(graph, mailbox, sujet=f"Consolidation impossible — {source.code_pdv} {periode}", detail=detail)
-        _notifier_echec_client(
-            graph, mailbox, adresses, sujet="Échec de consolidation de vos rapports Lightspeed",
-            filename=noms, detail=detail, point_de_vente=source.code_pdv, periode=periode,
-            prefixe_mail=prefixe_mail,
-        )
-        return
+        return echouer(detail, "Consolidation impossible")
 
     paire = charger_paire(source.client_id, cle)
     if paire is None:
-        _alerter(
-            graph, mailbox, sujet=f"Consolidation impossible — {source.code_pdv} {periode}",
-            detail=f"Les fichiers du sas d'attente sont introuvables pour la clé {cle}.",
+        return echouer(
+            f"Les fichiers du sas d'attente sont introuvables pour la clé {cle}.",
+            "Consolidation impossible",
         )
-        return
 
     try:
         res = construire_synthese(paire[0], paire[1], site)
     except SyntheseError as exc:
-        detail = f"{exc}"
-        _alerter(graph, mailbox, sujet=f"Échec de consolidation — {source.code_pdv} {periode}", detail=detail)
-        _notifier_echec_client(
-            graph, mailbox, adresses, sujet="Échec de consolidation de vos rapports Lightspeed",
-            filename=noms, detail=detail, point_de_vente=source.code_pdv, periode=periode,
-            prefixe_mail=prefixe_mail,
-        )
-        return
+        return echouer(f"{exc}", "Échec de consolidation")
 
     sources = list(paire[0]) + list(paire[1])
     record_consolidation(source.client_id, res, sources, now_local().strftime("%Y-%m-%d %H:%M:%S"))
-    _envoyer_resultat_consolidation(graph, mailbox, adresses, source, res, sources, prefixe_mail)
+    if graph is not None:
+        _envoyer_resultat_consolidation(graph, mailbox, adresses, source, res, sources, prefixe_mail)
     retirer(source.client_id, cle)
+    return True
 
 
 def _envoyer_resultat_consolidation(
@@ -401,6 +416,39 @@ def _envoyer_resultat_consolidation(
         attachments=[(nom, contenu) for nom, contenu in sources]
         + [(f"synthese_{res.site.lower()}_{jour}.xlsx", res.classeur)],
     )
+
+
+def reprendre_paires_en_echec(graph, mailbox: str, client_id: str, prefixe_mail: str = "LS2PL") -> int:
+    """Retente les paires complètes restées dans le sas, et renvoie le nombre
+    de consolidations enfin abouties.
+
+    Sans ça, une paire en échec est une impasse : le traitement n'est
+    déclenché que par l'ARRIVÉE d'un rapport, or les deux sont déjà là. Elle
+    resterait donc indéfiniment, même une fois la cause corrigée — c'est
+    exactement ce qui s'est produit en production, douze jours durant.
+
+    Retenter coûte une lecture de fichiers locaux ; la notification, elle, est
+    dédoublonnée sur le motif (cf. consolidation_sas.marquer_echec), donc
+    aucune répétition tant que la cause ne change pas.
+
+    `graph` peut être None : les paires sont alors consolidées et archivées
+    sans envoi de mail (relance manuelle depuis la page Consolidation)."""
+    mappings = load_mappings(client_id)
+    reussies = 0
+    for etat in paires_en_echec(client_id):
+        code_pdv = etat.get("code_pdv", "")
+        source = SourceIdentifiee(
+            client_id=client_id,
+            code_pdv=code_pdv,
+            date_debut=etat.get("date_debut"),
+            date_fin=etat.get("date_fin"),
+            traitement=TRAITEMENT_CONSOLIDATION,
+        )
+        periode = f"{etat.get('date_debut') or '?'} → {etat.get('date_fin') or '?'}"
+        if _consolider_paire(graph, mailbox, source, find_pdv(mappings, code_pdv), etat, periode, prefixe_mail):
+            reussies += 1
+            log.info("Consolidation reprise avec succès : %s/%s %s", client_id, code_pdv, periode)
+    return reussies
 
 
 def signaler_orphelins(graph, mailbox: str, client_id: str) -> int:

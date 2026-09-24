@@ -19,7 +19,7 @@ import pytest
 
 from core import consolidation_sas
 from core.client_store import create_client
-from core.email_poller import signaler_orphelins, traiter_client
+from core.email_poller import reprendre_paires_en_echec, signaler_orphelins, traiter_client
 from core.history_store import list_consolidations, list_history
 from core.mapping_store import DEFAULT_MAPPINGS, load_mappings, save_mappings
 from tests.test_email_poller import FakeGraph
@@ -240,3 +240,103 @@ def test_le_sas_nenregistre_que_le_nom_des_fichiers():
     infos = consolidation_sas.lister(client["id"])[0]["rapports"]["tickets"]
     assert infos["chemin"] == "tickets.xlsx"
     assert not os.path.isabs(infos["chemin"])
+
+
+# --- Reprise des paires complètes restées en échec -------------------------
+#
+# Constaté en production : cinq paires complètes bloquées douze jours durant.
+# Le traitement n'étant déclenché que par l'ARRIVÉE d'un rapport, une paire
+# déjà complète n'était jamais retentée, même la cause corrigée.
+
+
+def _paire_en_echec(graph) -> dict:
+    """Client dont le site de consolidation n'est pas renseigné : la paire
+    arrive complète et la consolidation échoue."""
+    client = _client_avec_consolidation(site="")
+    tickets, transactions = _fichiers()
+    graph.messages = [_message("m1", tickets), _message("m2", transactions)]
+    traiter_client(graph, client)
+    assert list_consolidations(client["id"]) == []
+    assert len(consolidation_sas.paires_en_echec(client["id"])) == 1
+    return client
+
+
+def _renseigner_le_site(client_id: str, site: str = "BAR") -> None:
+    mappings = load_mappings(client_id)
+    mappings["points_de_vente"] = [
+        {**p, "site_consolidation": site if p["code"] == "REST" else p.get("site_consolidation", "")}
+        for p in mappings["points_de_vente"]
+    ]
+    save_mappings(client_id, mappings)
+
+
+def test_une_paire_en_echec_repart_apres_correction_du_referentiel():
+    graph = FakeGraph()
+    client = _paire_en_echec(graph)
+
+    _renseigner_le_site(client["id"])
+    graph.messages = []                      # aucun nouveau mail : c'est tout l'enjeu
+    traiter_client(graph, client)
+
+    assert len(list_consolidations(client["id"])) == 1
+    assert consolidation_sas.lister(client["id"]) == []   # sas vidé
+    assert any(m["subject"].startswith("[LS2PL] Consolidation") for m in graph.sent)
+
+
+def test_le_meme_motif_nest_pas_renotifie_a_chaque_cycle():
+    # Sans dédoublonnage, une paire bloquée enverrait le même mail d'échec
+    # toutes les cinq minutes et noierait le signal.
+    graph = FakeGraph()
+    client = _paire_en_echec(graph)
+    nb_apres_premier_echec = len(graph.sent)
+
+    traiter_client(graph, client)
+    traiter_client(graph, client)
+
+    assert len(graph.sent) == nb_apres_premier_echec
+    assert (consolidation_sas.paires_en_echec(client["id"])[0]["derniere_erreur"]["motif"]
+            .startswith("Point de vente"))
+
+
+def test_un_motif_different_est_bien_signale():
+    graph = FakeGraph()
+    client = _paire_en_echec(graph)
+    graph.sent.clear()
+
+    # Le site est corrigé mais les fichiers du sas disparaissent : autre cause,
+    # donc autre message — celui-là doit être annoncé.
+    _renseigner_le_site(client["id"])
+    etat = consolidation_sas.paires_en_echec(client["id"])[0]
+    for infos in etat["rapports"].values():
+        os.remove(consolidation_sas.chemin_rapport(client["id"], etat["cle"], infos))
+
+    traiter_client(graph, client)
+    assert any("introuvables" in m["body_html"] for m in graph.sent)
+
+
+def test_relance_sans_client_graph_archive_quand_meme():
+    # C'est ce que fait le bouton « Relancer » quand la réception mail n'est
+    # pas configurée : la consolidation est calculée et archivée, simplement
+    # pas envoyée.
+    graph = FakeGraph()
+    client = _paire_en_echec(graph)
+    _renseigner_le_site(client["id"])
+
+    assert reprendre_paires_en_echec(None, "", client["id"]) == 1
+    assert len(list_consolidations(client["id"])) == 1
+    assert consolidation_sas.lister(client["id"]) == []
+
+
+def test_une_paire_en_echec_ne_bloque_pas_les_autres_traitements():
+    graph = FakeGraph()
+    client = _paire_en_echec(graph)
+
+    # Une autre période arrive et se consolide normalement, site renseigné.
+    _renseigner_le_site(client["id"])
+    t8, x8 = _fichiers("20260908_20260909")
+    graph.messages = [_message("m3", t8), _message("m4", x8)]
+    traiter_client(graph, client)
+
+    # Les deux ont abouti : la nouvelle, et l'ancienne reprise au passage.
+    assert len(list_consolidations(client["id"])) == 2
+    assert consolidation_sas.lister(client["id"]) == []

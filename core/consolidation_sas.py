@@ -28,6 +28,13 @@ etat.json ne retient que le NOM des fichiers, jamais leur chemin complet : le
 dossier se reconstruit à partir de (client, clé), et une sauvegarde restaurée
 sur une autre machine reste donc exploitable.
 
+Une paire complète qui reste dans le sas est une paire dont la consolidation a
+ÉCHOUÉ : les fichiers y sont conservés plutôt que perdus, et la paire est
+retentée à chaque cycle (cf. core.email_poller.reprendre_paires_en_echec) —
+la cause étant presque toujours à corriger dans le référentiel, pas dans le
+sas. Le motif du dernier échec est mémorisé pour ne notifier qu'une fois par
+cause (cf. marquer_echec).
+
 Deux garde-fous temporels :
 - DELAI_ALERTE_HEURES : au-delà, un rapport resté seul devient un incident
   signalé (un export cassé côté Lightspeed ne doit pas passer inaperçu) ;
@@ -252,6 +259,31 @@ def orphelins_a_signaler(client_id: str, maintenant: dt.datetime, delai_heures: 
         if age is not None and age >= delai_heures:
             a_signaler.append(etat)
     return a_signaler
+
+
+def marquer_echec(client_id: str, cle: str, motif: str, horodatage: str) -> bool:
+    """Mémorise pourquoi la consolidation d'une paire complète a échoué, et
+    renvoie True si ce motif diffère du précédent.
+
+    Sert à ne notifier qu'une fois par cause : une paire complète en échec est
+    retentée à chaque cycle (la correction se fait dans le référentiel, pas
+    dans le sas), et répéter le même mail toutes les cinq minutes noierait le
+    signal. Un motif qui change, en revanche, mérite d'être annoncé — il veut
+    dire qu'on a avancé, ou régressé."""
+    etat = _lire_etat(client_id, cle)
+    if etat is None:
+        return False
+    precedent = (etat.get("derniere_erreur") or {}).get("motif")
+    etat["derniere_erreur"] = {"motif": motif, "horodatage": horodatage}
+    _ecrire_etat(client_id, cle, etat)
+    return precedent != motif
+
+
+def paires_en_echec(client_id: str) -> list[dict]:
+    """Paires complètes toujours dans le sas : leur consolidation a échoué, et
+    rien ne les relancerait sans ça — le traitement n'est déclenché que par
+    l'arrivée d'un rapport, or les deux sont déjà là."""
+    return [etat for etat in lister(client_id) if est_complet(etat)]
 
 
 def marquer_signale(client_id: str, cle: str) -> None:

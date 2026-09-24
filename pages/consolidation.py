@@ -27,8 +27,36 @@ from core.lightspeed_synthese import (
     deviner_site,
 )
 from core.timezone import now_local
-from core.consolidation_sas import DELAI_ALERTE_HEURES, lister as lister_en_attente, rapport_manquant
+from core.consolidation_sas import (
+    DELAI_ALERTE_HEURES,
+    est_complet,
+    lister as lister_en_attente,
+    rapport_manquant,
+)
 from core.ui_common import render_bouton_releve_mails, select_client, styliser_zone_de_depot
+
+def _relancer_paires(client_id: str) -> int:
+    """Retente toutes les paires complètes en échec de ce client.
+
+    Le client Graph n'est construit que si la réception mail est configurée :
+    la consolidation aboutie doit alors repartir par mail comme elle l'aurait
+    fait automatiquement. Sans configuration, la relance fonctionne quand même
+    — le résultat est archivé dans l'historique, simplement pas envoyé."""
+    from core.client_store import get_client
+    from core.email_poller import _identifiants_azure, reprendre_paires_en_echec
+
+    client = get_client(client_id) or {}
+    graph = None
+    mailbox = client.get("email_mailbox") or ""
+    identifiants = _identifiants_azure(client) if client.get("email_tenant_id") and mailbox else None
+    if identifiants:
+        from core.graph_client import GraphClient
+
+        graph = GraphClient(
+            tenant_id=client["email_tenant_id"], client_id=identifiants[0], client_secret=identifiants[1]
+        )
+    return reprendre_paires_en_echec(graph, mailbox, client_id)
+
 
 client_id = select_client()
 
@@ -52,12 +80,20 @@ render_bouton_releve_mails(
     cle="releve_consolidation",
 )
 
-# Rapports reçus par mail dont le binôme n'est pas encore arrivé. Affiché même
-# quand tout va bien : c'est la seule fenêtre sur une attente qui, sinon, ne se
-# manifeste que par une consolidation qui ne vient pas.
-en_attente = lister_en_attente(client_id)
-if en_attente:
-    with st.expander(f"⏳ {len(en_attente)} rapport(s) reçu(s) par mail, en attente de leur binôme", expanded=False):
+# Rapports reçus par mail et pas encore consolidés. Deux situations très
+# différentes, d'où deux blocs : ceux qui attendent leur binôme (normal), et
+# ceux dont la paire est complète mais dont la consolidation a échoué.
+en_attente_total = lister_en_attente(client_id)
+attente_binome = [e for e in en_attente_total if not est_complet(e)]
+en_echec = [e for e in en_attente_total if est_complet(e)]
+
+
+def _depose_le(etat: dict) -> str:
+    return min((r.get("horodatage", "") for r in etat.get("rapports", {}).values()), default="")
+
+
+if attente_binome:
+    with st.expander(f"⏳ {len(attente_binome)} rapport(s) en attente de leur binôme", expanded=False):
         st.caption(
             f"Un rapport resté seul plus de {DELAI_ALERTE_HEURES} h déclenche une alerte interne. "
             "Il est conservé : un envoi tardif complète la paire et lance la consolidation."
@@ -68,16 +104,39 @@ if en_attente:
                     "Point de vente": e.get("code_pdv", ""),
                     "Période": f"{e.get('date_debut') or '?'} → {e.get('date_fin') or '?'}",
                     "Reçu": ", ".join(sorted(e.get("rapports", {}))),
-                    "En attente de": rapport_manquant(e) or "— (paire complète, en échec)",
-                    "Depuis": min(
-                        (r.get("horodatage", "") for r in e.get("rapports", {}).values()), default=""
-                    ),
+                    "En attente de": rapport_manquant(e),
+                    "Depuis": _depose_le(e),
                 }
-                for e in en_attente
+                for e in attente_binome
             ],
             use_container_width=True,
             hide_index=True,
         )
+
+if en_echec:
+    with st.expander(f"❌ {len(en_echec)} paire(s) complète(s) dont la consolidation a échoué", expanded=True):
+        st.caption(
+            "Les deux rapports sont là, mais la consolidation n'a pas abouti. Les fichiers sont "
+            "conservés : la cause se corrige presque toujours dans la Table de correspondance "
+            "(site de consolidation du point de vente, référentiel comptable). Chaque paire est "
+            "retentée automatiquement à chaque cycle de relève — le bouton ci-dessous évite "
+            "d'attendre le prochain."
+        )
+        for e in en_echec:
+            periode = f"{e.get('date_debut') or '?'} → {e.get('date_fin') or '?'}"
+            motif = (e.get("derniere_erreur") or {}).get("motif")
+            c1, c2 = st.columns([5, 1])
+            c1.markdown(f"**{e.get('code_pdv', '')}** — {periode}  ·  reçue le {_depose_le(e)}")
+            if motif:
+                c1.caption(f"Dernier motif : {motif}")
+            if c2.button("🔄 Relancer", key=f"relancer_{e['cle']}"):
+                with st.spinner("Nouvelle tentative..."):
+                    reussies = _relancer_paires(client_id)
+                if reussies:
+                    st.success(f"{reussies} consolidation(s) menée(s) à bien — voir « Historique ».")
+                else:
+                    st.error("La consolidation échoue toujours. Le motif ci-dessus indique quoi corriger.")
+                st.rerun()
 
 st.subheader("1. Importer les rapports Tickets et Transactions")
 styliser_zone_de_depot()
